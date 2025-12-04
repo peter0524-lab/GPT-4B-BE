@@ -1,4 +1,4 @@
-import pool from '../config/database.js';
+import pool from "../config/database.js";
 
 class BusinessCard {
   // Find all cards for a user
@@ -6,16 +6,16 @@ class BusinessCard {
     const { search, page = 1, limit = 20 } = options;
     const offset = (page - 1) * limit;
 
-    let query = 'SELECT * FROM business_cards WHERE userId = ?';
+    let query = "SELECT * FROM business_cards WHERE userId = ?";
     const params = [userId];
 
     if (search) {
-      query += ' AND (name LIKE ? OR company LIKE ? OR position LIKE ?)';
+      query += " AND (name LIKE ? OR company LIKE ? OR position LIKE ?)";
       const searchPattern = `%${search}%`;
       params.push(searchPattern, searchPattern, searchPattern);
     }
 
-    query += ' ORDER BY createdAt DESC LIMIT ? OFFSET ?';
+    query += " ORDER BY createdAt DESC LIMIT ? OFFSET ?";
     params.push(parseInt(limit), offset);
 
     const [rows] = await pool.query(query, params);
@@ -24,11 +24,11 @@ class BusinessCard {
 
   // Count cards for a user
   static async countByUserId(userId, search = null) {
-    let query = 'SELECT COUNT(*) as total FROM business_cards WHERE userId = ?';
+    let query = "SELECT COUNT(*) as total FROM business_cards WHERE userId = ?";
     const params = [userId];
 
     if (search) {
-      query += ' AND (name LIKE ? OR company LIKE ? OR position LIKE ?)';
+      query += " AND (name LIKE ? OR company LIKE ? OR position LIKE ?)";
       const searchPattern = `%${search}%`;
       params.push(searchPattern, searchPattern, searchPattern);
     }
@@ -39,11 +39,11 @@ class BusinessCard {
 
   // Find card by ID
   static async findById(id, userId = null) {
-    let query = 'SELECT * FROM business_cards WHERE id = ?';
+    let query = "SELECT * FROM business_cards WHERE id = ?";
     const params = [id];
 
     if (userId) {
-      query += ' AND userId = ?';
+      query += " AND userId = ?";
       params.push(userId);
     }
 
@@ -62,14 +62,27 @@ class BusinessCard {
       email,
       memo,
       image,
-      design = 'design-1',
-      isFavorite = false
+      gender,
+      design = "design-1",
+      isFavorite = false,
     } = cardData;
 
     const [result] = await pool.query(
-      `INSERT INTO business_cards (userId, name, position, company, phone, email, memo, image, design, isFavorite)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, name, position, company, phone, email, memo, image, design, isFavorite]
+      `INSERT INTO business_cards (userId, name, position, company, phone, email, memo, image, gender, design, isFavorite)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        name,
+        position,
+        company,
+        phone,
+        email,
+        memo,
+        image,
+        gender,
+        design,
+        isFavorite,
+      ]
     );
 
     return await this.findById(result.insertId);
@@ -80,7 +93,7 @@ class BusinessCard {
     const fields = [];
     const values = [];
 
-    Object.keys(updateData).forEach(key => {
+    Object.keys(updateData).forEach((key) => {
       if (updateData[key] !== undefined) {
         fields.push(`${key} = ?`);
         values.push(updateData[key]);
@@ -93,7 +106,9 @@ class BusinessCard {
 
     values.push(id, userId);
     await pool.query(
-      `UPDATE business_cards SET ${fields.join(', ')} WHERE id = ? AND userId = ?`,
+      `UPDATE business_cards SET ${fields.join(
+        ", "
+      )} WHERE id = ? AND userId = ?`,
       values
     );
 
@@ -103,7 +118,7 @@ class BusinessCard {
   // Delete card
   static async delete(id, userId) {
     const [result] = await pool.query(
-      'DELETE FROM business_cards WHERE id = ? AND userId = ?',
+      "DELETE FROM business_cards WHERE id = ? AND userId = ?",
       [id, userId]
     );
     return result.affectedRows > 0;

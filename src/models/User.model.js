@@ -4,7 +4,7 @@ class User {
   // Find user by ID
   static async findById(id) {
     const [rows] = await pool.query(
-      "SELECT id, username, email, name, phone, company, position, profileImage, oauthProvider, oauthId, subscription, cardLimit, isActive, createdAt, updatedAt FROM users WHERE id = ?",
+      "SELECT id, username, email, name, phone, cardDesign, company, position, profileImage, oauthProvider, oauthId, subscription, cardLimit, isActive, createdAt, updatedAt FROM users WHERE id = ?",
       [id]
     );
     return rows[0] || null;
@@ -32,6 +32,7 @@ class User {
       email,
       username,
       password,
+      cardDesign,
       name,
       phone,
       company,
@@ -44,12 +45,13 @@ class User {
     } = userData;
 
     const [result] = await pool.query(
-      `INSERT INTO users (email, username, password, name, phone, company, position, profileImage, oauthProvider, oauthId, subscription, cardLimit)
+      `INSERT INTO users (email, username, password, cardDesign, name, phone, company, position, profileImage, oauthProvider, oauthId, subscription, cardLimit)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         email,
         username,
         password,
+        cardDesign,
         name,
         phone,
         company,
