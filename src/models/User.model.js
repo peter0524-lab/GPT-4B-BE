@@ -1,21 +1,28 @@
-import pool from '../config/database.js';
+import pool from "../config/database.js";
 
 class User {
   // Find user by ID
   static async findById(id) {
     const [rows] = await pool.query(
-      'SELECT id, email, name, phone, profileImage, oauthProvider, oauthId, subscription, cardLimit, isActive, createdAt, updatedAt FROM users WHERE id = ?',
+      "SELECT id, username, email, name, phone, company, position, profileImage, oauthProvider, oauthId, subscription, cardLimit, isActive, createdAt, updatedAt FROM users WHERE id = ?",
       [id]
     );
     return rows[0] || null;
   }
 
+  // Find user by username
+  static async findByUsername(username) {
+    const [rows] = await pool.query("SELECT * FROM users WHERE username = ?", [
+      username,
+    ]);
+    return rows[0] || null;
+  }
+
   // Find user by email
   static async findByEmail(email) {
-    const [rows] = await pool.query(
-      'SELECT * FROM users WHERE email = ?',
-      [email]
-    );
+    const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
+      email,
+    ]);
     return rows[0] || null;
   }
 
@@ -23,20 +30,36 @@ class User {
   static async create(userData) {
     const {
       email,
+      username,
       password,
       name,
       phone,
+      company,
+      position,
       profileImage,
       oauthProvider,
       oauthId,
-      subscription = 'free',
-      cardLimit = 200
+      subscription = "free",
+      cardLimit = 200,
     } = userData;
 
     const [result] = await pool.query(
-      `INSERT INTO users (email, password, name, phone, profileImage, oauthProvider, oauthId, subscription, cardLimit)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [email, password, name, phone, profileImage, oauthProvider, oauthId, subscription, cardLimit]
+      `INSERT INTO users (email, username, password, name, phone, company, position, profileImage, oauthProvider, oauthId, subscription, cardLimit)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        email,
+        username,
+        password,
+        name,
+        phone,
+        company,
+        position,
+        profileImage,
+        oauthProvider,
+        oauthId,
+        subscription,
+        cardLimit,
+      ]
     );
 
     return await this.findById(result.insertId);
@@ -47,7 +70,7 @@ class User {
     const fields = [];
     const values = [];
 
-    Object.keys(updateData).forEach(key => {
+    Object.keys(updateData).forEach((key) => {
       if (updateData[key] !== undefined) {
         fields.push(`${key} = ?`);
         values.push(updateData[key]);
@@ -60,7 +83,7 @@ class User {
 
     values.push(id);
     await pool.query(
-      `UPDATE users SET ${fields.join(', ')} WHERE id = ?`,
+      `UPDATE users SET ${fields.join(", ")} WHERE id = ?`,
       values
     );
 
@@ -69,13 +92,9 @@ class User {
 
   // Delete user (soft delete)
   static async delete(id) {
-    await pool.query(
-      'UPDATE users SET isActive = FALSE WHERE id = ?',
-      [id]
-    );
+    await pool.query("UPDATE users SET isActive = FALSE WHERE id = ?", [id]);
     return true;
   }
-
 }
 
 export default User;

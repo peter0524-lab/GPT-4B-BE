@@ -1,11 +1,14 @@
-import mysql from 'mysql2/promise';
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const pool = mysql.createPool({
-  timezone: '+09:00', // 한국 시간대 설정
-  host: process.env.DB_HOST || '127.0.0.1',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'peter0524!',
-  database: process.env.DB_NAME || 'backendTest',
+  timezone: "+09:00", // 한국 시간대 설정
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
   port: process.env.DB_PORT || 3306,
   multipleStatements: true, // 여러 SQL 쿼리 실행 허용
   dateStrings: true, // 날짜 데이터를 문자열로 반환
@@ -20,11 +23,11 @@ const pool = mysql.createPool({
 const testConnection = async () => {
   try {
     const connection = await pool.getConnection();
-    console.log('✅ MySQL connected successfully');
+    console.log("✅ MySQL connected successfully");
     connection.release();
     return true;
   } catch (error) {
-    console.error('❌ MySQL connection error:', error.message);
+    console.error("❌ MySQL connection error:", error.message);
     return false;
   }
 };
@@ -33,7 +36,7 @@ const testConnection = async () => {
 const createTables = async () => {
   try {
     const connection = await pool.getConnection();
-    
+
     // Users 테이블
     await connection.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -149,13 +152,12 @@ const createTables = async () => {
     `);
 
     connection.release();
-    console.log('✅ Database tables created/verified successfully');
+    console.log("✅ Database tables created/verified successfully");
   } catch (error) {
-    console.error('❌ Error creating tables:', error.message);
+    console.error("❌ Error creating tables:", error.message);
     throw error;
   }
 };
 
 export { pool, testConnection, createTables };
 export default pool;
-
