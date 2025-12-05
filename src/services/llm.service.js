@@ -68,7 +68,7 @@ const processWithGPT = async (messages) => {
     throw new Error("OpenAI API returned no choices");
   } catch (error) {
     console.error("OpenAI API Error:", error);
-    
+
     // OpenAI API 에러 메시지 추출
     if (error.response?.data?.error?.message) {
       throw new Error(`OpenAI API Error: ${error.response.data.error.message}`);
@@ -179,7 +179,8 @@ Your goal is to convert raw profiles of people into a standardized, keyword-dens
         messages: [
           {
             role: "system",
-            content: "You are an expert at structuring persona data for vector embeddings. Always respond with exactly one line of text in the specified format.",
+            content:
+              "You are an expert at structuring persona data for vector embeddings. Always respond with exactly one line of text in the specified format.",
           },
           {
             role: "user",
@@ -205,13 +206,15 @@ Your goal is to convert raw profiles of people into a standardized, keyword-dens
     throw new Error("OpenAI API returned no choices");
   } catch (error) {
     console.error("Persona Embedding API Error:", error);
-    
+
     if (error.response?.data?.error?.message) {
       throw new Error(`OpenAI API Error: ${error.response.data.error.message}`);
     } else if (error.message) {
       throw new Error(`OpenAI API Error: ${error.message}`);
     } else {
-      throw new Error("Persona embedding 처리에 실패했습니다. API 키를 확인해주세요.");
+      throw new Error(
+        "Persona embedding 처리에 실패했습니다. API 키를 확인해주세요."
+      );
     }
   }
 };
@@ -259,9 +262,11 @@ export const generateEmbedding = async (
     throw new Error("OpenAI Embedding API returned no embedding");
   } catch (error) {
     console.error("OpenAI Embedding API Error:", error);
-    
+
     if (error.response?.data?.error?.message) {
-      throw new Error(`OpenAI Embedding API Error: ${error.response.data.error.message}`);
+      throw new Error(
+        `OpenAI Embedding API Error: ${error.response.data.error.message}`
+      );
     } else if (error.message) {
       throw new Error(`OpenAI Embedding API Error: ${error.message}`);
     } else {
@@ -278,7 +283,12 @@ export const generateEmbedding = async (
  * @param {number} topN - Number of top gifts to return (default: 3)
  * @returns {Promise<Array>} Reranked top N gifts
  */
-export const rerankGifts = async (gifts, personaString, originalData = {}, topN = 3) => {
+export const rerankGifts = async (
+  gifts,
+  personaString,
+  originalData = {},
+  topN = 3
+) => {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
@@ -294,35 +304,39 @@ export const rerankGifts = async (gifts, personaString, originalData = {}, topN 
 
   try {
     // Format gifts for LLM with detailed information
-    const giftsList = gifts.map((gift, index) => {
-      const metadata = gift.metadata || {};
-      const document = gift.document || '';
-      const name = metadata.name || metadata.product_name || '이름 없음';
-      const category = metadata.category || '카테고리 없음';
-      const price = metadata.price || '가격 정보 없음';
-      const event = metadata.event || '';
-      const vibe = metadata.vibe || '';
-      const utility = metadata.utility || '';
-      
-      // document나 unified_text에서 상세 정보 추출
-      const description = document || metadata.unified_text || '';
-      
-      return `[선물 ${index}]
+    const giftsList = gifts
+      .map((gift, index) => {
+        const metadata = gift.metadata || {};
+        const document = gift.document || "";
+        const name = metadata.name || metadata.product_name || "이름 없음";
+        const category = metadata.category || "카테고리 없음";
+        const price = metadata.price || "가격 정보 없음";
+        const event = metadata.event || "";
+        const vibe = metadata.vibe || "";
+        const utility = metadata.utility || "";
+
+        // document나 unified_text에서 상세 정보 추출
+        const description = document || metadata.unified_text || "";
+
+        return `[선물 ${index}]
 - 이름: ${name}
 - 카테고리: ${category}
 - 가격: ${price}
-- 이벤트: ${event || '없음'}
-- 감성/분위기: ${vibe || '없음'}
-- 효용/기능: ${utility || '없음'}
-- 상세 설명: ${description.substring(0, 200)}${description.length > 200 ? '...' : ''}`;
-    }).join('\n\n');
+- 이벤트: ${event || "없음"}
+- 감성/분위기: ${vibe || "없음"}
+- 효용/기능: ${utility || "없음"}
+- 상세 설명: ${description.substring(0, 200)}${
+          description.length > 200 ? "..." : ""
+        }`;
+      })
+      .join("\n\n");
 
     // 원본 사용자 입력 정보 포맷팅
     const userInputInfo = `
-- 직급/직책: ${originalData.rank || '정보없음'}
-- 성별: ${originalData.gender || '정보없음'}
-- 메모: ${originalData.memo || '정보없음'}
-- 추가 정보: ${originalData.addMemo || '정보없음'}`;
+- 직급/직책: ${originalData.rank || "정보없음"}
+- 성별: ${originalData.gender || "정보없음"}
+- 메모: ${originalData.memo || "정보없음"}
+- 추가 정보: ${originalData.addMemo || "정보없음"}`;
 
     const prompt = `[Role]
 당신은 사용자의 선호도와 상황을 정확히 분석하여 가장 적합한 선물을 추천하는 전문가입니다.
@@ -373,7 +387,8 @@ ${giftsList}
         messages: [
           {
             role: "system",
-            content: "You are a gift recommendation expert. You must respond with ONLY a valid JSON array of integers (indices), nothing else. Example: [0, 2, 3]. Do not include any explanation, markdown, or other text.",
+            content:
+              "You are a gift recommendation expert. You must respond with ONLY a valid JSON array of integers (indices), nothing else. Example: [0, 2, 3]. Do not include any explanation, markdown, or other text.",
           },
           {
             role: "user",
@@ -393,24 +408,24 @@ ${giftsList}
 
     if (response.data.choices && response.data.choices.length > 0) {
       const result = response.data.choices[0].message.content.trim();
-      
+
       // Parse JSON array from response
       let rankedIndices;
       try {
         // Remove markdown code blocks if present
         let cleanedResult = result
-          .replace(/```json\n?/g, '')
-          .replace(/```\n?/g, '')
-          .replace(/^\[/, '[')
-          .replace(/\]$/, ']')
+          .replace(/```json\n?/g, "")
+          .replace(/```\n?/g, "")
+          .replace(/^\[/, "[")
+          .replace(/\]$/, "]")
           .trim();
-        
+
         // Try to extract array from text if it's not pure JSON
         const arrayMatch = cleanedResult.match(/\[[\d\s,]*\]/);
         if (arrayMatch) {
           cleanedResult = arrayMatch[0];
         }
-        
+
         rankedIndices = JSON.parse(cleanedResult);
       } catch (parseError) {
         console.error("Failed to parse rerank result:", result);
@@ -426,17 +441,23 @@ ${giftsList}
       }
 
       if (rankedIndices.length === 0) {
-        console.warn("Invalid rerank result (empty array), using similarity order");
+        console.warn(
+          "Invalid rerank result (empty array), using similarity order"
+        );
         return gifts.slice(0, topN);
       }
 
       // Convert to integers and filter valid indices
       const validIndices = rankedIndices
-        .map(idx => {
-          const numIdx = typeof idx === 'string' ? parseInt(idx, 10) : idx;
-          return Number.isInteger(numIdx) && numIdx >= 0 && numIdx < gifts.length ? numIdx : null;
+        .map((idx) => {
+          const numIdx = typeof idx === "string" ? parseInt(idx, 10) : idx;
+          return Number.isInteger(numIdx) &&
+            numIdx >= 0 &&
+            numIdx < gifts.length
+            ? numIdx
+            : null;
         })
-        .filter(idx => idx !== null)
+        .filter((idx) => idx !== null)
         .slice(0, topN);
 
       if (validIndices.length === 0) {
@@ -455,18 +476,20 @@ ${giftsList}
       }
 
       if (uniqueIndices.length === 0) {
-        console.warn("No unique valid indices from rerank, using similarity order");
+        console.warn(
+          "No unique valid indices from rerank, using similarity order"
+        );
         return gifts.slice(0, topN);
       }
 
       // Return reranked gifts
-      return uniqueIndices.map(idx => gifts[idx]);
+      return uniqueIndices.map((idx) => gifts[idx]);
     }
 
     throw new Error("OpenAI API returned no choices");
   } catch (error) {
     console.error("Rerank API Error:", error);
-    
+
     // Fallback: return top N by similarity if rerank fails
     console.warn("Rerank failed, using similarity order");
     return gifts.slice(0, topN);
@@ -480,25 +503,29 @@ ${giftsList}
  * @param {Object} originalData - Original user input data
  * @returns {Promise<Object>} Rationale with title and description
  */
-export const generateGiftRationale = async (gift, personaString, originalData = {}) => {
+export const generateGiftRationale = async (
+  gift,
+  personaString,
+  originalData = {}
+) => {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
 
   try {
     const metadata = gift.metadata || {};
-    const document = gift.document || metadata.unified_text || '';
-    const giftName = metadata.name || metadata.product_name || '선물';
-    const category = metadata.category || '';
-    const vibe = metadata.vibe || '';
-    const utility = metadata.utility || '';
-    const event = metadata.event || '';
+    const document = gift.document || metadata.unified_text || "";
+    const giftName = metadata.name || metadata.product_name || "선물";
+    const category = metadata.category || "";
+    const vibe = metadata.vibe || "";
+    const utility = metadata.utility || "";
+    const event = metadata.event || "";
 
     const userContext = `
-- 직급/직책: ${originalData.rank || '정보없음'}
-- 성별: ${originalData.gender || '정보없음'}
-- 메모: ${originalData.memo || '정보없음'}
-- 추가 정보: ${originalData.addMemo || '정보없음'}`;
+- 직급/직책: ${originalData.rank || "정보없음"}
+- 성별: ${originalData.gender || "정보없음"}
+- 메모: ${originalData.memo || "정보없음"}
+- 추가 정보: ${originalData.addMemo || "정보없음"}`;
 
     const prompt = `[Role]
 당신은 선물 추천 시스템의 분석가입니다. 사용자의 특성과 검색된 문서를 기반으로 왜 이 선물이 추천되었는지에 대한 자연스러운 설명을 생성합니다.
@@ -512,12 +539,12 @@ ${personaString}
 [추천 선물 정보]
 - 상품명: ${giftName}
 - 카테고리: ${category}
-- 감성/분위기: ${vibe || '없음'}
-- 효용/기능: ${utility || '없음'}
-- 이벤트: ${event || '없음'}
+- 감성/분위기: ${vibe || "없음"}
+- 효용/기능: ${utility || "없음"}
+- 이벤트: ${event || "없음"}
 
 [검색된 문서 근거]
-${document.substring(0, 500)}${document.length > 500 ? '...' : ''}
+${document.substring(0, 500)}${document.length > 500 ? "..." : ""}
 
 [Task]
 위 정보를 종합하여 다음을 생성하세요:
@@ -561,7 +588,8 @@ JSON만 반환하세요, 다른 텍스트 없이:`;
         messages: [
           {
             role: "system",
-            content: "You are a gift recommendation analyst. Always respond with valid JSON only.",
+            content:
+              "You are a gift recommendation analyst. Always respond with valid JSON only.",
           },
           {
             role: "user",
@@ -581,12 +609,15 @@ JSON만 반환하세요, 다른 텍스트 없이:`;
 
     if (response.data.choices && response.data.choices.length > 0) {
       const result = response.data.choices[0].message.content.trim();
-      
+
       try {
         // Remove markdown code blocks if present
-        const cleanedResult = result.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const cleanedResult = result
+          .replace(/```json\n?/g, "")
+          .replace(/```\n?/g, "")
+          .trim();
         const rationale = JSON.parse(cleanedResult);
-        
+
         // Validate structure
         if (rationale.title && rationale.description) {
           return {
@@ -600,26 +631,183 @@ JSON만 반환하세요, 다른 텍스트 없이:`;
     }
 
     // Fallback: Generate simple rationale
-    const fallbackTitle = originalData.addMemo && originalData.addMemo !== '정보없음' 
-      ? originalData.addMemo.split('_')[0] 
-      : category || '추천 선물';
-    
+    const fallbackTitle =
+      originalData.addMemo && originalData.addMemo !== "정보없음"
+        ? originalData.addMemo.split("_")[0]
+        : category || "추천 선물";
+
     const fallbackDesc = `${personaString}에 맞춰 ${giftName}을(를) 추천드립니다.`;
-    
+
     return {
       title: fallbackTitle,
       description: fallbackDesc,
     };
   } catch (error) {
     console.error("Rationale generation error:", error);
-    
+
     // Fallback
     const metadata = gift.metadata || {};
     return {
-      title: metadata.category || '추천 선물',
+      title: metadata.category || "추천 선물",
       description: `${personaString}에 맞춰 추천드립니다.`,
     };
   }
+};
+
+/**
+ * Extract search keywords from persona data for Naver Shopping search
+ * @param {Object} personaData - Persona data object
+ * @param {string} personaData.rank - Rank/Position
+ * @param {string} personaData.gender - Gender
+ * @param {string} personaData.memo - Primary memo (interests, hobbies)
+ * @param {string} personaData.addMemo - Additional memo (occasion, constraints)
+ * @param {string} userQuery - Optional user query for context
+ * @returns {Promise<Array<string>>} Array of search keywords for Naver Shopping
+ */
+export const extractSearchKeywords = async (personaData, userQuery = "") => {
+  const { rank = "", gender = "", memo = "", addMemo = "" } = personaData;
+
+  if (!process.env.OPENAI_API_KEY) {
+    // API 키가 없으면 기본 키워드 추출 로직 사용
+    return extractKeywordsFallback(personaData, userQuery);
+  }
+
+  const prompt = `[Role]
+당신은 선물 추천을 위한 검색 키워드 전문가입니다.
+주어진 정보를 분석하여 네이버 쇼핑에서 검색할 최적의 키워드를 추출합니다.
+
+[입력 정보]
+- 사용자 검색어: ${userQuery || "없음"}
+- 직급/직책: ${rank || "정보없음"}
+- 성별: ${gender || "정보없음"}
+- 메모 (관심사/취미): ${memo || "정보없음"}
+- 추가 정보 (상황/제약조건): ${addMemo || "정보없음"}
+
+[키워드 추출 규칙]
+1. 메모와 추가 정보에서 **구체적인 관심사, 취미, 상황**을 추출하세요.
+2. 추상적인 표현은 구체적인 상품 키워드로 변환하세요.
+   - "골프를 좋아함" → "골프용품", "골프공", "골프장갑"
+   - "와인을 즐김" → "와인세트", "와인잔", "와인오프너"
+   - "건강이 안 좋음" → "건강식품", "영양제"
+3. 직급과 성별을 고려하여 적절한 선물 카테고리를 추가하세요.
+   - 임원급 + 남성 → "고급 선물", "비즈니스 선물"
+   - 여성 → "뷰티", "향수" 등 고려
+4. 상황(생일, 승진, 감사 등)에 맞는 키워드도 추가하세요.
+5. 키워드는 네이버 쇼핑에서 실제로 검색했을 때 좋은 결과가 나오는 형태로 작성하세요.
+
+[출력 형식]
+JSON 배열로 3-5개의 검색 키워드를 반환하세요.
+예시: ["골프용품 선물", "프리미엄 와인세트", "건강식품"]
+
+중요: JSON 배열만 반환하세요. 다른 설명 없이 순수한 JSON 배열만 반환하세요.`;
+
+  try {
+    const response = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a search keyword extraction expert. Always respond with ONLY a valid JSON array of Korean search keywords. No explanation, no markdown.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 150,
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+      }
+    );
+
+    if (response.data.choices && response.data.choices.length > 0) {
+      const result = response.data.choices[0].message.content.trim();
+
+      try {
+        // JSON 파싱 시도
+        let cleanedResult = result
+          .replace(/```json\n?/g, "")
+          .replace(/```\n?/g, "")
+          .trim();
+
+        const arrayMatch = cleanedResult.match(/\[[\s\S]*\]/);
+        if (arrayMatch) {
+          cleanedResult = arrayMatch[0];
+        }
+
+        const keywords = JSON.parse(cleanedResult);
+
+        if (Array.isArray(keywords) && keywords.length > 0) {
+          return keywords.filter(
+            (k) => typeof k === "string" && k.trim() !== ""
+          );
+        }
+      } catch (parseError) {
+        console.error("Keyword extraction parse error:", parseError.message);
+      }
+    }
+
+    // 파싱 실패 시 폴백
+    return extractKeywordsFallback(personaData, userQuery);
+  } catch (error) {
+    console.error("Keyword extraction API error:", error.message);
+    return extractKeywordsFallback(personaData, userQuery);
+  }
+};
+
+/**
+ * Fallback keyword extraction without LLM
+ * @param {Object} personaData - Persona data
+ * @param {string} userQuery - User query
+ * @returns {Array<string>} Keywords array
+ */
+const extractKeywordsFallback = (personaData, userQuery = "") => {
+  const { memo = "", addMemo = "" } = personaData;
+  const keywords = [];
+
+  // 사용자 쿼리가 있으면 추가
+  if (userQuery && userQuery.trim()) {
+    keywords.push(userQuery.trim());
+  }
+
+  // 메모에서 키워드 추출
+  if (memo && memo.trim()) {
+    // "~를 좋아함", "~를 즐김" 등의 패턴에서 키워드 추출
+    const cleaned = memo
+      .replace(/를?\s*(좋아함|좋아해|즐김|즐겨|좋아하|관심)/g, "")
+      .replace(/이?\s*(있음|있어|없음|없어)/g, "")
+      .trim();
+
+    if (cleaned) {
+      keywords.push(`${cleaned} 선물`);
+    }
+  }
+
+  // 추가 정보에서 상황 키워드 추출
+  if (addMemo && addMemo.trim()) {
+    const occasions = ["생일", "승진", "감사", "결혼", "출산", "졸업", "취업"];
+    for (const occasion of occasions) {
+      if (addMemo.includes(occasion)) {
+        keywords.push(`${occasion} 선물`);
+        break;
+      }
+    }
+  }
+
+  // 키워드가 없으면 기본값
+  if (keywords.length === 0) {
+    keywords.push("선물 추천");
+  }
+
+  return keywords;
 };
 
 /**

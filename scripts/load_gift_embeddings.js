@@ -13,7 +13,7 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 const csvArg = process.argv[2];
 const csvPath = csvArg
   ? path.resolve(csvArg)
-  : path.resolve(__dirname, "..", "..", "df_gift__embeddings.csv");
+  : path.resolve(__dirname, "..", "df_gift__embeddings.csv");
 
 console.log(`🔎 CSV 경로: ${csvPath}`);
 
@@ -23,7 +23,7 @@ const main = async () => {
     console.log("🔌 ChromaDB 연결 확인 중...");
     const chromaDbPath = process.env.CHROMADB_PATH || "http://localhost:8000";
     console.log(`📍 ChromaDB 경로: ${chromaDbPath}`);
-    
+
     const isConnected = await testConnection();
     if (!isConnected) {
       console.error("\n❌ ChromaDB 서버에 연결할 수 없습니다.");
@@ -40,7 +40,7 @@ const main = async () => {
     }
 
     console.log("✅ ChromaDB 연결 성공!\n");
-    
+
     // CSV 업로드
     const result = await loadGiftDataFromCSV(csvPath);
     console.log(
@@ -49,7 +49,10 @@ const main = async () => {
     process.exit(0);
   } catch (error) {
     console.error("❌ 업로드 실패:", error.message);
-    if (error.message.includes("connect") || error.message.includes("ECONNREFUSED")) {
+    if (
+      error.message.includes("connect") ||
+      error.message.includes("ECONNREFUSED")
+    ) {
       console.error("\n💡 ChromaDB 서버가 실행 중인지 확인해주세요.");
     }
     process.exit(1);
@@ -57,4 +60,3 @@ const main = async () => {
 };
 
 main();
-

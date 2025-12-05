@@ -46,7 +46,7 @@ class User {
 
     const [result] = await pool.query(
       `INSERT INTO users (email, username, password, cardDesign, name, phone, company, position, profileImage, oauthProvider, oauthId, subscription, cardLimit)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         email,
         username,
