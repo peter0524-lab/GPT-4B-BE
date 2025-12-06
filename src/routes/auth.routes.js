@@ -14,10 +14,13 @@ router.post(
   [
     body("username")
       .trim()
-      .isLength({ min: 3 })
-      .withMessage("Username must be at least 3 characters long"),
+      .isLength({ min: 4 })
+      .withMessage("Username must be at least 4 characters long")
+      .matches(/^[a-zA-Z][a-zA-Z0-9]*$/)
+      .withMessage("Username must start with a letter and contain only letters and numbers"),
     body("email").isEmail().normalizeEmail(),
-    body("password").isLength({ min: 6 }),
+    body("password").isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters long"),
     body("name").optional().trim(),
     body("phone").optional().trim(),
     body("company").optional().trim(),
