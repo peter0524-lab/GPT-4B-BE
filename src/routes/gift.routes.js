@@ -372,19 +372,20 @@ router.post(
                 if (currentResults.length < minResults && attempts < maxAttempts) {
                   console.log(`      ⚠️  결과 부족 (${currentResults.length}개/${minResults}개), 추가 전략 시도 중...`);
                   
-                  // 전략: 가격 필터 완화
+                  // 전략: 가격 필터 완화 (원래 가격 범위는 유지하며 API 호출 시 필터 없이 검색)
                   if (minPriceWon || maxPriceWon) {
-                    console.log(`         → 가격 필터 완화하여 재검색`);
+                    console.log(`         → 가격 필터 완화하여 재검색 (가격 범위는 유지: ${minPriceWon || '없음'}~${maxPriceWon || '없음'})`);
+                    // 가격 범위는 그대로 전달 (getNaverGiftRecommendations 내부에서 전략 2가 가격 필터 완화 처리)
                     const relaxedResult = await getNaverGiftRecommendations(keyword, {
                       display: Math.min(minResults * 2, 100),
                       sort: "sim",
-                      minPrice: null, // 가격 필터 제거
-                      maxPrice: null,
+                      minPrice: minPriceWon, // 가격 범위 유지
+                      maxPrice: maxPriceWon, // 가격 범위 유지
                     });
                     
                     if (relaxedResult.recommendedGifts && relaxedResult.recommendedGifts.length > currentResults.length) {
                       currentResults = relaxedResult.recommendedGifts;
-                      console.log(`         ✅ 가격 필터 제거 후 ${currentResults.length}개 결과`);
+                      console.log(`         ✅ 가격 필터 완화 후 ${currentResults.length}개 결과 (가격 범위 내)`);
                     }
                   }
                   
@@ -1037,19 +1038,20 @@ router.post(
                   if (currentResults.length < minResults && attempts < maxAttempts) {
                     console.log(`      ⚠️  결과 부족 (${currentResults.length}개/${minResults}개), 추가 전략 시도 중...`);
                     
-                    // 전략: 가격 필터 완화
+                    // 전략: 가격 필터 완화 (원래 가격 범위는 유지하며 API 호출 시 필터 없이 검색)
                     if (minPriceWon || maxPriceWon) {
-                      console.log(`         → 가격 필터 완화하여 재검색`);
+                      console.log(`         → 가격 필터 완화하여 재검색 (가격 범위는 유지: ${minPriceWon || '없음'}~${maxPriceWon || '없음'})`);
+                      // 가격 범위는 그대로 전달 (getNaverGiftRecommendations 내부에서 전략 2가 가격 필터 완화 처리)
                       const relaxedResult = await getNaverGiftRecommendations(keyword, {
                         display: Math.min(minResults * 2, 100),
                         sort: "sim",
-                        minPrice: null,
-                        maxPrice: null,
+                        minPrice: minPriceWon, // 가격 범위 유지
+                        maxPrice: maxPriceWon, // 가격 범위 유지
                       });
                       
                       if (relaxedResult.recommendedGifts && relaxedResult.recommendedGifts.length > currentResults.length) {
                         currentResults = relaxedResult.recommendedGifts;
-                        console.log(`         ✅ 가격 필터 제거 후 ${currentResults.length}개 결과`);
+                        console.log(`         ✅ 가격 필터 완화 후 ${currentResults.length}개 결과 (가격 범위 내)`);
                       }
                     }
                     

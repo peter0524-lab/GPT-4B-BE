@@ -194,29 +194,42 @@ export const getNaverGiftRecommendations = async (query, options = {}) => {
       }
     }
 
-    // 전략 2: 여전히 부족하면 가격 필터 완화 (최소 가격만 체크)
+    // 전략 2: 여전히 부족하면 가격 필터 완화 (네이버 API 호출 시 필터 없이 검색 후, 결과는 가격 범위 내에서만 필터링)
     if (gifts.length < targetCount && (minPrice !== null || maxPrice !== null)) {
-      console.log(`      → 전략 2: 가격 필터 완화`);
+      console.log(`      → 전략 2: 가격 필터 완화 (API 호출 시 필터 제거, 결과는 가격 범위 내에서만 선택)`);
       searchResult = await searchNaverShopping(query, Math.min(100, total || 100), sort);
       naverItems = searchResult.items || [];
       gifts = formatNaverResultsAsGifts(naverItems);
       
-      // 최소 가격만 체크 (최대 가격 제한 완화)
-      if (minPrice !== null) {
+      // 가격 범위 내에서만 필터링 (절대 범위 벗어나지 않음)
+      if (minPrice !== null || maxPrice !== null) {
         gifts = gifts.filter((gift) => {
           const price = gift.metadata.price_num;
-          return price !== null && price >= minPrice;
+          if (price === null) return false;
+          if (minPrice !== null && price < minPrice) return false;
+          if (maxPrice !== null && price > maxPrice) return false;
+          return true;
         });
       }
     }
 
-    // 전략 3: 가격 필터 완전 제거
+    // 전략 3: 가격 필터 완전 제거 (다른 정렬 방식 시도 - 가격 범위는 여전히 유지)
     if (gifts.length < targetCount && (minPrice !== null || maxPrice !== null)) {
-      console.log(`      → 전략 3: 가격 필터 제거`);
+      console.log(`      → 전략 3: 다른 정렬 방식 시도 (가격 범위 유지)`);
       searchResult = await searchNaverShopping(query, Math.min(100, total || 100), sort);
       naverItems = searchResult.items || [];
       gifts = formatNaverResultsAsGifts(naverItems);
-      // 가격 필터 없이 모든 결과 사용
+      
+      // 가격 범위 내에서만 필터링 (절대 범위 벗어나지 않음)
+      if (minPrice !== null || maxPrice !== null) {
+        gifts = gifts.filter((gift) => {
+          const price = gift.metadata.price_num;
+          if (price === null) return false;
+          if (minPrice !== null && price < minPrice) return false;
+          if (maxPrice !== null && price > maxPrice) return false;
+          return true;
+        });
+      }
     }
 
     // 전략 4: 다른 정렬 방식 시도 (date, asc, dsc)
