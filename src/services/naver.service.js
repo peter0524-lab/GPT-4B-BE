@@ -3,53 +3,210 @@ import axios from "axios";
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "gUrltWt5A39qWZP0UzQn";
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "CjH7SHpY10";
 
+// API 호출 통계 추적
+let apiStats = {
+  totalCalls: 0,
+  successCalls: 0,
+  failedCalls: 0,
+  retryCalls: 0,
+  rateLimitHits: 0,
+  lastResetTime: Date.now(),
+};
+
+/**
+ * API 통계 리셋 (1분마다)
+ */
+const resetStatsIfNeeded = () => {
+  const now = Date.now();
+  if (now - apiStats.lastResetTime > 60000) {
+    // 1분마다 리셋
+    console.log("\n📊 [네이버 API 통계 (최근 1분)]");
+    console.log(`   총 호출: ${apiStats.totalCalls}회`);
+    console.log(`   성공: ${apiStats.successCalls}회`);
+    console.log(`   실패: ${apiStats.failedCalls}회`);
+    console.log(`   재시도: ${apiStats.retryCalls}회`);
+    console.log(`   Rate Limit: ${apiStats.rateLimitHits}회`);
+    console.log("");
+
+    apiStats = {
+      totalCalls: 0,
+      successCalls: 0,
+      failedCalls: 0,
+      retryCalls: 0,
+      rateLimitHits: 0,
+      lastResetTime: now,
+    };
+  }
+};
+
+/**
+ * 딜레이 유틸리티 함수
+ * @param {number} ms - 대기 시간 (밀리초)
+ */
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * 타임스탬프 생성 (로그용)
+ */
+const getTimestamp = () => {
+  return new Date().toISOString().replace("T", " ").substring(0, 23);
+};
+
 /**
  * 네이버 쇼핑 API를 사용하여 상품 검색
+ * - 네트워크 오류(429, 5xx, 타임아웃)에 대해서만 1회 재시도
+ * - 비즈니스 로직 재시도는 하지 않음 (호출하는 쪽에서 처리)
  * @param {string} query - 검색 쿼리
- * @param {number} display - 검색 결과 개수 (기본값: 5)
+ * @param {number} display - 검색 결과 개수 (기본값: 10)
  * @param {string} sort - 정렬 방식 (sim: 정확도순, date: 날짜순, asc: 가격낮은순, dsc: 가격높은순)
- * @returns {Promise<Array>} 검색 결과
+ * @returns {Promise<Object>} 검색 결과
  */
-export const searchNaverShopping = async (query, display = 5, sort = "sim") => {
+export const searchNaverShopping = async (
+  query,
+  display = 10,
+  sort = "sim"
+) => {
+  resetStatsIfNeeded();
+
   if (!query || query.trim() === "") {
     throw new Error("검색어를 입력해주세요.");
   }
 
-  try {
-    const response = await axios.get(
-      "https://openapi.naver.com/v1/search/shop.json",
-      {
-        params: {
-          query: query,
-          display: display,
-          start: 1,
-          sort: sort,
-        },
-        headers: {
-          "X-Naver-Client-Id": NAVER_CLIENT_ID,
-          "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-        },
+  const requestId = `REQ-${Date.now()}-${Math.random()
+    .toString(36)
+    .substr(2, 5)}`;
+  const startTime = Date.now();
+
+  console.log(`\n🔍 [${getTimestamp()}] 네이버 API 호출 시작 [${requestId}]`);
+  console.log(`   📝 검색어: "${query}"`);
+  console.log(`   📊 파라미터: display=${display}, sort=${sort}`);
+
+  apiStats.totalCalls++;
+
+  const makeRequest = async (isRetry = false) => {
+    const reqStartTime = Date.now();
+
+    try {
+      const response = await axios.get(
+        "https://openapi.naver.com/v1/search/shop.json",
+        {
+          params: {
+            query: query,
+            display: Math.min(display, 100),
+            start: 1,
+            sort: sort,
+          },
+          headers: {
+            "X-Naver-Client-Id": NAVER_CLIENT_ID,
+            "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
+          },
+          timeout: 10000,
+        }
+      );
+
+      const reqDuration = Date.now() - reqStartTime;
+
+      if (response.data) {
+        const result = {
+          items: response.data.items || [],
+          total: response.data.total || 0,
+          start: response.data.start || 1,
+          display: response.data.display || display,
+          lastBuildDate: response.data.lastBuildDate || null,
+        };
+
+        console.log(
+          `   ✅ API 응답 성공 (${reqDuration}ms)${isRetry ? " [재시도]" : ""}`
+        );
+        console.log(`      → 총 검색 결과: ${result.total.toLocaleString()}개`);
+        console.log(`      → 반환 결과: ${result.items.length}개`);
+
+        if (!isRetry) apiStats.successCalls++;
+        return result;
       }
+
+      return { items: [], total: 0, start: 1, display: 0, lastBuildDate: null };
+    } catch (error) {
+      const reqDuration = Date.now() - reqStartTime;
+      throw { ...error, reqDuration };
+    }
+  };
+
+  try {
+    const result = await makeRequest(false);
+    const totalDuration = Date.now() - startTime;
+    console.log(`   ⏱️  총 소요 시간: ${totalDuration}ms [${requestId}]`);
+    return result;
+  } catch (error) {
+    const status = error.response?.status;
+    const reqDuration = error.reqDuration || 0;
+
+    console.log(`   ❌ API 오류 발생 (${reqDuration}ms)`);
+    console.log(`      → 상태 코드: ${status || "N/A"}`);
+    console.log(`      → 에러 코드: ${error.code || "N/A"}`);
+    console.log(`      → 메시지: ${error.message}`);
+
+    const isRetryable =
+      status === 429 ||
+      status >= 500 ||
+      error.code === "ECONNABORTED" ||
+      error.code === "ECONNREFUSED" ||
+      error.code === "ENOTFOUND";
+
+    if (status === 429) {
+      apiStats.rateLimitHits++;
+      console.log(`   🚫 Rate Limit 감지! (총 ${apiStats.rateLimitHits}회)`);
+    }
+
+    if (isRetryable) {
+      apiStats.retryCalls++;
+      console.log(`   🔄 재시도 대기 중... (500ms)`);
+      await sleep(500);
+
+      try {
+        const retryResult = await makeRequest(true);
+        const totalDuration = Date.now() - startTime;
+        console.log(
+          `   ⏱️  총 소요 시간: ${totalDuration}ms (재시도 포함) [${requestId}]`
+        );
+        return retryResult;
+      } catch (retryError) {
+        apiStats.failedCalls++;
+        const retryStatus = retryError.response?.status;
+        console.log(`   ❌ 재시도 실패`);
+        console.log(`      → 상태 코드: ${retryStatus || "N/A"}`);
+        console.log(`      → 에러: ${retryError.message}`);
+
+        if (retryStatus === 429) {
+          apiStats.rateLimitHits++;
+        }
+
+        const totalDuration = Date.now() - startTime;
+        console.log(
+          `   ⏱️  총 소요 시간: ${totalDuration}ms (실패) [${requestId}]`
+        );
+
+        return {
+          items: [],
+          total: 0,
+          start: 1,
+          display: 0,
+          lastBuildDate: null,
+        };
+      }
+    }
+
+    apiStats.failedCalls++;
+    const totalDuration = Date.now() - startTime;
+    console.log(
+      `   ⏱️  총 소요 시간: ${totalDuration}ms (실패, 재시도 불가) [${requestId}]`
     );
 
-    if (response.data) {
-      return {
-        items: response.data.items || [],
-        total: response.data.total || 0, // 총 검색 결과 개수
-        start: response.data.start || 1, // 검색 시작 위치
-        display: response.data.display || display, // 한 번에 표시할 검색 결과 개수
-        lastBuildDate: response.data.lastBuildDate || null, // 검색 결과 생성 시간
-      };
+    if (error.response?.data) {
+      console.log(`      → 응답 데이터:`, error.response.data);
     }
 
     return { items: [], total: 0, start: 1, display: 0, lastBuildDate: null };
-  } catch (error) {
-    console.error("네이버 쇼핑 API 오류:", error.message);
-    if (error.response) {
-      console.error("응답 상태:", error.response.status);
-      console.error("응답 데이터:", error.response.data);
-    }
-    throw new Error("네이버 쇼핑 검색에 실패했습니다.");
   }
 };
 
@@ -59,16 +216,18 @@ export const searchNaverShopping = async (query, display = 5, sort = "sim") => {
  * @returns {Array} 변환된 선물 목록
  */
 export const formatNaverResultsAsGifts = (naverItems) => {
-  return naverItems.map((item, index) => {
-    // HTML 태그 제거 (네이버 API는 <b> 태그로 검색어를 감싸서 반환)
-    const cleanTitle = item.title.replace(/<[^>]*>/g, "");
+  if (!naverItems || !Array.isArray(naverItems)) {
+    return [];
+  }
 
-    // 카테고리 정보 구조화
+  return naverItems.map((item, index) => {
+    const cleanTitle = item.title ? item.title.replace(/<[^>]*>/g, "") : "";
+
     const categories = {
-      category1: item.category1 || "", // 대분류
-      category2: item.category2 || "", // 중분류
-      category3: item.category3 || "", // 소분류
-      category4: item.category4 || "", // 세분류
+      category1: item.category1 || "",
+      category2: item.category2 || "",
+      category3: item.category3 || "",
+      category4: item.category4 || "",
     };
 
     const categoryPath = [
@@ -83,59 +242,43 @@ export const formatNaverResultsAsGifts = (naverItems) => {
     return {
       id: item.productId || `naver-${index}`,
       metadata: {
-        // === 기본 상품 정보 ===
         name: cleanTitle,
         product_name: cleanTitle,
-
-        // === 가격 정보 ===
-        price: item.lprice || "0", // 최저가 (문자열)
-        price_num: item.lprice ? parseInt(item.lprice, 10) : 0, // 최저가 (숫자)
-        hprice: item.hprice || "0", // 최고가
-        hprice_num: item.hprice ? parseInt(item.hprice, 10) : 0, // 최고가 (숫자)
-
-        // === URL 및 이미지 ===
-        url: item.link || "", // 상품 정보 URL
-        link: item.link || "", // 상품 정보 URL (별칭)
-        image: item.image || "", // 섬네일 이미지 URL
-
-        // === 카테고리 정보 ===
-        category: categoryPath, // 전체 카테고리 경로 (대분류 > 중분류 > 소분류 > 세분류)
-        category1: categories.category1, // 대분류
-        category2: categories.category2, // 중분류
-        category3: categories.category3, // 소분류
-        category4: categories.category4, // 세분류
-
-        // === 제조사/브랜드 정보 ===
-        brand: item.brand || "", // 브랜드
-        maker: item.maker || "", // 제조사
-
-        // === 판매처 정보 ===
-        mallName: item.mallName || "네이버", // 쇼핑몰명
-
-        // === 상품 식별 정보 ===
-        productId: item.productId || "", // 네이버 쇼핑 상품 ID
-        productType: item.productType || "", // 상품 타입 (1: 일반상품 등)
-
-        // === ChromaDB 호환 필드 (빈 값) ===
+        price: item.lprice || "0",
+        price_num: item.lprice ? parseInt(item.lprice, 10) : 0,
+        hprice: item.hprice || "0",
+        hprice_num: item.hprice ? parseInt(item.hprice, 10) : 0,
+        url: item.link || "",
+        link: item.link || "",
+        image: item.image || "",
+        category: categoryPath,
+        category1: categories.category1,
+        category2: categories.category2,
+        category3: categories.category3,
+        category4: categories.category4,
+        brand: item.brand || "",
+        maker: item.maker || "",
+        mallName: item.mallName || "네이버",
+        productId: item.productId || "",
+        productType: item.productType || "",
         event: "",
         vibe: "",
         utility: "",
         etc: "",
       },
-      // === 검색 관련 정보 ===
       distance: null,
       document: cleanTitle,
       similarity: null,
-      source: "naver", // 출처 표시
+      source: "naver",
     };
   });
 };
 
 /**
- * 쿼리를 받아서 네이버 쇼핑에서 선물 추천 (ChromaDB 형식과 동일하게 반환)
+ * 쿼리를 받아서 네이버 쇼핑에서 선물 추천 (단순 API 호출 + 가격 필터링만)
  * @param {string} query - 검색 쿼리
  * @param {Object} options - 옵션
- * @param {number} options.display - 검색 결과 개수 (기본값: 5)
+ * @param {number} options.display - 검색 결과 개수 (기본값: 10)
  * @param {string} options.sort - 정렬 방식 (기본값: sim)
  * @param {number} options.minPrice - 최소 가격 (선택)
  * @param {number} options.maxPrice - 최대 가격 (선택)
@@ -143,132 +286,59 @@ export const formatNaverResultsAsGifts = (naverItems) => {
  */
 export const getNaverGiftRecommendations = async (query, options = {}) => {
   const {
-    display = 5,
+    display = 10,
     sort = "sim",
     minPrice = null,
     maxPrice = null,
   } = options;
 
-  // 최소 목표 결과 개수 (최소 3개 보장)
-  const targetCount = Math.max(display, 3);
-  
-  // 네이버 쇼핑 검색 (최대한 많은 결과를 가져오기 위해 display * 3으로 증가)
-  let searchResult = await searchNaverShopping(query, Math.min(targetCount * 3, 100), sort); // 네이버 API 최대 100개
-  let { items: naverItems, total, lastBuildDate } = searchResult;
+  const funcStartTime = Date.now();
+
+  console.log(`\n📦 [getNaverGiftRecommendations] 시작`);
+  console.log(`   검색어: "${query}"`);
+  console.log(`   옵션: display=${display}, sort=${sort}`);
+  console.log(
+    `   가격 범위: ${minPrice ? minPrice.toLocaleString() : "없음"}원 ~ ${
+      maxPrice ? maxPrice.toLocaleString() : "없음"
+    }원`
+  );
+
+  // 네이버 쇼핑 검색
+  const searchResult = await searchNaverShopping(query, display, sort);
+  const { items: naverItems, total, lastBuildDate } = searchResult;
 
   // 형식 변환
   let gifts = formatNaverResultsAsGifts(naverItems);
+  const beforeFilterCount = gifts.length;
+
+  console.log(`   📋 형식 변환 완료: ${beforeFilterCount}개`);
 
   // 가격 필터링
   if (minPrice !== null || maxPrice !== null) {
     gifts = gifts.filter((gift) => {
       const price = gift.metadata.price_num;
-      if (price === null) return false;
+      if (price === null || price === 0) return false;
       if (minPrice !== null && price < minPrice) return false;
       if (maxPrice !== null && price > maxPrice) return false;
       return true;
     });
-  }
 
-  // 결과가 없거나 목표 개수 미만이면 여러 전략 시도
-  if (gifts.length < targetCount) {
-    console.log(`   ⚠️  "${query}" 검색 결과 부족 (${gifts.length}개/${targetCount}개), 재시도 전략 적용 중...`);
-    
-    // 전략 1: display를 최대한 늘려서 재검색
-    if (total > 0 && gifts.length < targetCount) {
-      console.log(`      → 전략 1: display 최대화 (총 ${total}개 결과 존재, 목표: ${targetCount}개)`);
-      const maxDisplay = Math.min(total, 100); // 네이버 API 최대 100개
-      searchResult = await searchNaverShopping(query, maxDisplay, sort);
-      naverItems = searchResult.items || [];
-      gifts = formatNaverResultsAsGifts(naverItems);
-      
-      // 가격 필터 재적용
-      if (minPrice !== null || maxPrice !== null) {
-        gifts = gifts.filter((gift) => {
-          const price = gift.metadata.price_num;
-          if (price === null) return false;
-          if (minPrice !== null && price < minPrice) return false;
-          if (maxPrice !== null && price > maxPrice) return false;
-          return true;
-        });
-      }
-    }
+    const filteredOut = beforeFilterCount - gifts.length;
+    console.log(
+      `   💰 가격 필터링: ${beforeFilterCount}개 → ${gifts.length}개 (${filteredOut}개 제외)`
+    );
 
-    // 전략 2: 여전히 부족하면 가격 필터 완화 (네이버 API 호출 시 필터 없이 검색 후, 결과는 가격 범위 내에서만 필터링)
-    if (gifts.length < targetCount && (minPrice !== null || maxPrice !== null)) {
-      console.log(`      → 전략 2: 가격 필터 완화 (API 호출 시 필터 제거, 결과는 가격 범위 내에서만 선택)`);
-      searchResult = await searchNaverShopping(query, Math.min(100, total || 100), sort);
-      naverItems = searchResult.items || [];
-      gifts = formatNaverResultsAsGifts(naverItems);
-      
-      // 가격 범위 내에서만 필터링 (절대 범위 벗어나지 않음)
-      if (minPrice !== null || maxPrice !== null) {
-        gifts = gifts.filter((gift) => {
-          const price = gift.metadata.price_num;
-          if (price === null) return false;
-          if (minPrice !== null && price < minPrice) return false;
-          if (maxPrice !== null && price > maxPrice) return false;
-          return true;
-        });
-      }
-    }
-
-    // 전략 3: 가격 필터 완전 제거 (다른 정렬 방식 시도 - 가격 범위는 여전히 유지)
-    if (gifts.length < targetCount && (minPrice !== null || maxPrice !== null)) {
-      console.log(`      → 전략 3: 다른 정렬 방식 시도 (가격 범위 유지)`);
-      searchResult = await searchNaverShopping(query, Math.min(100, total || 100), sort);
-      naverItems = searchResult.items || [];
-      gifts = formatNaverResultsAsGifts(naverItems);
-      
-      // 가격 범위 내에서만 필터링 (절대 범위 벗어나지 않음)
-      if (minPrice !== null || maxPrice !== null) {
-        gifts = gifts.filter((gift) => {
-          const price = gift.metadata.price_num;
-          if (price === null) return false;
-          if (minPrice !== null && price < minPrice) return false;
-          if (maxPrice !== null && price > maxPrice) return false;
-          return true;
-        });
-      }
-    }
-
-    // 전략 4: 다른 정렬 방식 시도 (date, asc, dsc)
-    if (gifts.length < targetCount && sort === "sim") {
-      console.log(`      → 전략 4: 다른 정렬 방식 시도 (date)`);
-      const alternativeSorts = ["date", "asc", "dsc"];
-      for (const altSort of alternativeSorts) {
-        if (gifts.length >= targetCount) break;
-        try {
-          searchResult = await searchNaverShopping(query, Math.min(100, total || 100), altSort);
-          naverItems = searchResult.items || [];
-          gifts = formatNaverResultsAsGifts(naverItems);
-          
-          // 가격 필터 적용
-          if (minPrice !== null || maxPrice !== null) {
-            gifts = gifts.filter((gift) => {
-              const price = gift.metadata.price_num;
-              if (price === null) return false;
-              if (minPrice !== null && price < minPrice) return false;
-              if (maxPrice !== null && price > maxPrice) return false;
-              return true;
-            });
-          }
-          
-          if (gifts.length >= targetCount) {
-            console.log(`         ✅ "${altSort}" 정렬로 ${gifts.length}개 결과 발견`);
-            break;
-          }
-        } catch (error) {
-          console.error(`         ❌ "${altSort}" 정렬 시도 실패:`, error.message);
-        }
-      }
+    if (gifts.length > 0) {
+      const prices = gifts.map((g) => g.metadata.price_num);
+      const minActual = Math.min(...prices);
+      const maxActual = Math.max(...prices);
+      console.log(
+        `      실제 가격 범위: ${minActual.toLocaleString()}원 ~ ${maxActual.toLocaleString()}원`
+      );
     }
   }
 
-  // 결과 개수 제한 (최소 3개 보장)
-  gifts = gifts.slice(0, targetCount);
-
-  // Rationale cards 생성 (상세 버전)
+  // Rationale cards 생성
   const rationaleCards = gifts.map((gift, idx) => {
     const meta = gift.metadata;
     const categoryMain = meta.category1 || "추천 선물";
@@ -285,7 +355,6 @@ export const getNaverGiftRecommendations = async (query, options = {}) => {
       description: `${brandInfo}${meta.name}${makerInfo}${
         priceInfo ? ` - ${priceInfo}` : ""
       }`,
-      // 추가 상세 정보
       details: {
         mallName: meta.mallName,
         brand: meta.brand,
@@ -298,6 +367,22 @@ export const getNaverGiftRecommendations = async (query, options = {}) => {
     };
   });
 
+  const funcDuration = Date.now() - funcStartTime;
+  console.log(`   ✅ [getNaverGiftRecommendations] 완료 (${funcDuration}ms)`);
+  console.log(`      → 최종 결과: ${gifts.length}개`);
+
+  // 상위 3개 미리보기
+  if (gifts.length > 0) {
+    console.log(`      → 상위 결과 미리보기:`);
+    gifts.slice(0, 3).forEach((gift, idx) => {
+      console.log(
+        `         ${idx + 1}. ${gift.metadata.name.substring(0, 40)}${
+          gift.metadata.name.length > 40 ? "..." : ""
+        } (${gift.metadata.price_num.toLocaleString()}원)`
+      );
+    });
+  }
+
   return {
     personaString: `[검색어] ${query}`,
     recommendedGifts: gifts,
@@ -306,11 +391,17 @@ export const getNaverGiftRecommendations = async (query, options = {}) => {
       query,
       source: "naver_shopping",
     },
-    // 검색 메타 정보
     searchMeta: {
-      total, // 총 검색 결과 개수
-      returned: gifts.length, // 반환된 결과 개수
-      lastBuildDate, // 검색 결과 생성 시간
+      total,
+      returned: gifts.length,
+      lastBuildDate,
     },
   };
+};
+
+/**
+ * 현재 API 통계 조회 (디버깅용)
+ */
+export const getApiStats = () => {
+  return { ...apiStats };
 };

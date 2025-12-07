@@ -338,138 +338,107 @@ router.post(
         const keywordResults = [];
         const failedKeywords = []; // 실패한 키워드 추적
 
-        // 키워드 검색 함수 (최소 3개 결과 보장)
+        // 딜레이 유틸리티 함수
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+        // 키워드 검색 함수 (최소 결과 보장, 재시도는 여기서만 처리)
         const searchWithKeyword = async (keyword, minResults = 3) => {
           try {
             const keywordSearchStartTime = Date.now();
-            let currentResults = [];
-            let attempts = 0;
-            const maxAttempts = 3;
-            
-            // 최소 3개 결과를 얻을 때까지 재시도
-            while (currentResults.length < minResults && attempts < maxAttempts) {
-              attempts++;
-              const display = attempts === 1 ? minResults : Math.min(minResults * 2, 100); // 첫 시도는 3개, 이후는 더 많이
-              
-              console.log(`\n   → 네이버 검색 중: "${keyword}" (시도 ${attempts}/${maxAttempts}, display=${display})`);
+            let bestResults = [];
+            const strategies = [
+              { display: 30, sort: "sim", desc: "정확도순 (display=30)" },
+              { display: 50, sort: "sim", desc: "정확도순 (display=50)" },
+              { display: 50, sort: "date", desc: "날짜순" },
+            ];
+
+            for (let i = 0; i < strategies.length; i++) {
+              const strategy = strategies[i];
+
+              // Rate Limit 방지를 위한 딜레이 (첫 시도 제외)
+              if (i > 0) {
+                await sleep(300);
+              }
+
               console.log(
-                `      파라미터: sort=sim, minPrice=${
-                  minPriceWon || "없음"
-                }, maxPrice=${maxPriceWon || "없음"}`
+                `\n   → 네이버 검색 중: "${keyword}" (전략 ${i + 1}/${
+                  strategies.length
+                }: ${strategy.desc})`
               );
-              
+              console.log(
+                `      파라미터: sort=${strategy.sort}, display=${
+                  strategy.display
+                }, minPrice=${minPriceWon || "없음"}, maxPrice=${
+                  maxPriceWon || "없음"
+                }`
+              );
+
               const result = await getNaverGiftRecommendations(keyword, {
-                display: display,
-                sort: "sim",
+                display: strategy.display,
+                sort: strategy.sort,
                 minPrice: minPriceWon,
                 maxPrice: maxPriceWon,
               });
-              
-              if (result.recommendedGifts && result.recommendedGifts.length > 0) {
-                currentResults = result.recommendedGifts;
-                
-                // 3개 미만이면 추가 전략 시도
-                if (currentResults.length < minResults && attempts < maxAttempts) {
-                  console.log(`      ⚠️  결과 부족 (${currentResults.length}개/${minResults}개), 추가 전략 시도 중...`);
-                  
-                  // 전략: 가격 필터 완화 (원래 가격 범위는 유지하며 API 호출 시 필터 없이 검색)
-                  if (minPriceWon || maxPriceWon) {
-                    console.log(`         → 가격 필터 완화하여 재검색 (가격 범위는 유지: ${minPriceWon || '없음'}~${maxPriceWon || '없음'})`);
-                    // 가격 범위는 그대로 전달 (getNaverGiftRecommendations 내부에서 전략 2가 가격 필터 완화 처리)
-                    const relaxedResult = await getNaverGiftRecommendations(keyword, {
-                      display: Math.min(minResults * 2, 100),
-                      sort: "sim",
-                      minPrice: minPriceWon, // 가격 범위 유지
-                      maxPrice: maxPriceWon, // 가격 범위 유지
-                    });
-                    
-                    if (relaxedResult.recommendedGifts && relaxedResult.recommendedGifts.length > currentResults.length) {
-                      currentResults = relaxedResult.recommendedGifts;
-                      console.log(`         ✅ 가격 필터 완화 후 ${currentResults.length}개 결과 (가격 범위 내)`);
-                    }
-                  }
-                  
-                  // 여전히 부족하면 다른 정렬 방식 시도
-                  if (currentResults.length < minResults) {
-                    const alternativeSorts = ["date", "asc", "dsc"];
-                    for (const altSort of alternativeSorts) {
-                      if (currentResults.length >= minResults) break;
-                      
-                      console.log(`         → "${altSort}" 정렬로 재검색`);
-                      const altResult = await getNaverGiftRecommendations(keyword, {
-                        display: Math.min(minResults * 2, 100),
-                        sort: altSort,
-                        minPrice: minPriceWon,
-                        maxPrice: maxPriceWon,
-                      });
-                      
-                      if (altResult.recommendedGifts && altResult.recommendedGifts.length > currentResults.length) {
-                        currentResults = altResult.recommendedGifts;
-                        console.log(`         ✅ "${altSort}" 정렬로 ${currentResults.length}개 결과`);
-                        break;
-                      }
-                    }
-                  }
-                }
-                
-                // 최종 결과가 있으면 추가하고 종료
-                if (currentResults.length > 0) {
-                  naverGifts.push(...currentResults);
-                  searchedKeywords.push(keyword);
-                  const keywordSearchTime = Date.now() - keywordSearchStartTime;
-                  
-                  keywordResults.push({
-                    keyword,
-                    count: currentResults.length,
-                    time: keywordSearchTime,
-                    gifts: currentResults,
-                  });
-                  
-                  console.log(
-                    `      ✅ "${keyword}": ${currentResults.length}개 결과 (소요: ${keywordSearchTime}ms)`
-                  );
-                  currentResults.forEach((gift, idx) => {
-                    console.log(
-                      `         ${idx + 1}. ${
-                        gift.name || gift.metadata?.name || "이름 없음"
-                      }`
-                    );
-                    console.log(
-                      `            가격: ${
-                        gift.price || gift.metadata?.price || "가격 정보 없음"
-                      }`
-                    );
-                    console.log(
-                      `            브랜드: ${
-                        gift.brand || gift.metadata?.brand || "브랜드 없음"
-                      }`
-                    );
-                  });
-                  
-                  // 3개 이상이거나 더 이상 시도할 전략이 없으면 종료
-                  if (currentResults.length >= minResults || attempts >= maxAttempts) {
-                    return currentResults.length > 0;
-                  }
-                }
+
+              const currentResults = result.recommendedGifts || [];
+
+              // 더 좋은 결과가 있으면 업데이트
+              if (currentResults.length > bestResults.length) {
+                bestResults = currentResults;
+                console.log(`      → 결과: ${currentResults.length}개`);
               } else {
-                console.log(`      ⚠️  "${keyword}": 결과 없음 (시도 ${attempts}/${maxAttempts})`);
+                console.log(
+                  `      → 결과: ${currentResults.length}개 (이전 결과 유지: ${bestResults.length}개)`
+                );
               }
-              
-              // 마지막 시도였고 결과가 없으면 실패 반환
-              if (attempts >= maxAttempts && currentResults.length === 0) {
-                return false;
+
+              // 목표 개수 달성하면 즉시 종료
+              if (bestResults.length >= minResults) {
+                console.log(
+                  `      ✅ 목표 달성 (${bestResults.length}개 >= ${minResults}개)`
+                );
+                break;
               }
             }
-            
-            // 최종적으로 결과가 있으면 성공
-            return currentResults.length > 0;
+
+            // 최종 결과 처리
+            if (bestResults.length > 0) {
+              naverGifts.push(...bestResults);
+              searchedKeywords.push(keyword);
+              const keywordSearchTime = Date.now() - keywordSearchStartTime;
+
+              keywordResults.push({
+                keyword,
+                count: bestResults.length,
+                time: keywordSearchTime,
+                gifts: bestResults,
+              });
+
+              console.log(
+                `      ✅ "${keyword}": 최종 ${bestResults.length}개 결과 (소요: ${keywordSearchTime}ms)`
+              );
+              bestResults.slice(0, 3).forEach((gift, idx) => {
+                console.log(
+                  `         ${idx + 1}. ${
+                    gift.metadata?.name || "이름 없음"
+                  } - ${
+                    gift.metadata?.price_num?.toLocaleString() ||
+                    "가격 정보 없음"
+                  }원`
+                );
+              });
+
+              return true;
+            }
+
+            console.log(`      ⚠️  "${keyword}": 결과 없음`);
+            return false;
           } catch (keywordError) {
             console.error(
               `      ❌ "${keyword}" 검색 실패:`,
               keywordError.message
             );
-            console.error(`         스택:`, keywordError.stack);
-            return false; // 실패
+            return false;
           }
         };
 
@@ -485,20 +454,30 @@ router.post(
 
         // 핵심 키워드만 검색 (최대 3개)
         const coreKeywords = extractedKeywords.slice(0, 3);
-        
+
         // 각 키워드 검색: 최소 3개 결과 보장
-        for (const keyword of coreKeywords) {
-          let success = await searchWithKeyword(keyword, 3); // 최소 3개 결과 요구
-          
-          // 결과가 없거나 3개 미만이면 키워드 단순화해서 재검색
+        for (let i = 0; i < coreKeywords.length; i++) {
+          const keyword = coreKeywords[i];
+
+          // 키워드 간 딜레이 (첫 키워드 제외)
+          if (i > 0) {
+            console.log(`   💤 키워드 간 딜레이 (300ms)...`);
+            await sleep(300);
+          }
+
+          let success = await searchWithKeyword(keyword, 3);
+
+          // 결과가 없으면 키워드 단순화해서 재검색
           if (!success) {
             const simplifiedKeyword = simplifyKeyword(keyword);
             if (simplifiedKeyword && simplifiedKeyword !== keyword) {
-              console.log(`      ⚠️  결과 없음 → 키워드 단순화하여 재검색: "${keyword}" → "${simplifiedKeyword}"`);
-              success = await searchWithKeyword(simplifiedKeyword, 3); // 최소 3개 결과 요구
+              console.log(
+                `      ⚠️  결과 없음 → 키워드 단순화하여 재검색: "${keyword}" → "${simplifiedKeyword}"`
+              );
+              await sleep(300); // 단순화 재검색 전 딜레이
+              success = await searchWithKeyword(simplifiedKeyword, 3);
             }
-            
-            // 여전히 실패하면 실패 목록에 추가
+
             if (!success) {
               failedKeywords.push(keyword);
             }
@@ -507,30 +486,84 @@ router.post(
 
         // 결과가 부족하면 일반 선물 키워드로 폴백
         if (naverGifts.length < 3) {
-          console.log(`\n   → 결과 부족 (${naverGifts.length}개), 일반 선물 키워드로 폴백 검색...`);
+          console.log(
+            `\n   → 결과 부족 (${naverGifts.length}개), 일반 선물 키워드로 폴백 검색...`
+          );
           const fallbackKeywords = ["선물", "기프트", "선물세트"];
-          for (const fallbackKeyword of fallbackKeywords) {
-            if (naverGifts.length >= 3) break; // 최소 3개만 확보하면 중단
-            await searchWithKeyword(fallbackKeyword, 1);
+          for (let i = 0; i < fallbackKeywords.length; i++) {
+            if (naverGifts.length >= 3) break;
+            if (i > 0) await sleep(300); // 폴백 키워드 간 딜레이
+            await searchWithKeyword(fallbackKeywords[i], 1);
           }
         }
 
         // 중복 제거는 리랭킹 단계에서 처리하므로 여기서는 제거하지 않음
-        console.log(`\n   → 네이버 검색 결과 수집 완료: ${naverGifts.length}개`);
+        const step3Time = Date.now() - step3StartTime;
+
+        // ===== 네이버 검색 통계 요약 =====
+        console.log(`\n${"=".repeat(60)}`);
+        console.log(`📊 [Step 3] 네이버 쇼핑 검색 통계 요약`);
+        console.log(`${"=".repeat(60)}`);
+        console.log(`   ⏱️  총 소요 시간: ${step3Time}ms`);
+        console.log(`   🔑 추출 키워드: ${extractedKeywords.length}개`);
+        console.log(`   🔍 실제 검색 키워드: ${searchedKeywords.length}개`);
+        console.log(`   ❌ 실패 키워드: ${failedKeywords.length}개`);
+        console.log(`   📦 수집 결과: ${naverGifts.length}개`);
+
+        // 키워드별 결과 요약
+        if (keywordResults.length > 0) {
+          console.log(`\n   📋 키워드별 검색 결과:`);
+          keywordResults.forEach((kr, idx) => {
+            console.log(
+              `      ${idx + 1}. "${kr.keyword}": ${kr.count}개 (${kr.time}ms)`
+            );
+          });
+        }
+
+        // 실패 키워드 목록
+        if (failedKeywords.length > 0) {
+          console.log(`\n   ⚠️  실패한 키워드:`);
+          failedKeywords.forEach((kw, idx) => {
+            console.log(`      ${idx + 1}. "${kw}"`);
+          });
+        }
+
+        // 가격 분포 분석
+        if (naverGifts.length > 0) {
+          const prices = naverGifts
+            .map((g) => g.metadata?.price_num || 0)
+            .filter((p) => p > 0);
+          if (prices.length > 0) {
+            const minPrice = Math.min(...prices);
+            const maxPrice = Math.max(...prices);
+            const avgPrice = Math.round(
+              prices.reduce((a, b) => a + b, 0) / prices.length
+            );
+            console.log(`\n   💰 가격 분포:`);
+            console.log(`      최저가: ${minPrice.toLocaleString()}원`);
+            console.log(`      최고가: ${maxPrice.toLocaleString()}원`);
+            console.log(`      평균가: ${avgPrice.toLocaleString()}원`);
+          }
+        }
+        console.log(`${"=".repeat(60)}\n`);
 
         searchResults.naver = {
           success: true,
-          gifts: naverGifts, // 중복 제거하지 않고 모두 포함
+          gifts: naverGifts,
           count: naverGifts.length,
           extractedKeywords,
           searchedKeywords,
+          failedKeywords,
+          keywordResults,
+          timing: {
+            total: step3Time,
+            keywordExtract: keywordExtractTime,
+          },
         };
-        const step3Time = Date.now() - step3StartTime;
-        console.log(
-          `\n✅ [Step 3] 네이버 검색 완료: ${naverGifts.length}개 결과 (중복은 리랭킹 단계에서 처리, 총 소요: ${step3Time}ms)`
-        );
-        console.log(`   사용된 키워드: ${searchedKeywords.join(", ")}`);
-        console.log(`\n   📋 네이버 검색 결과 상세:`);
+
+        console.log(`✅ [Step 3] 네이버 검색 완료 (${step3Time}ms)`);
+        console.log(`\n   📋 네이버 검색 결과 상세 (상위 5개):`);
+
         naverGifts.slice(0, 5).forEach((gift, idx) => {
           console.log(
             `   ${idx + 1}. [ID: ${
@@ -606,11 +639,16 @@ router.post(
       console.log(`\n   📋 통합 전 전체 선물 목록 (총 ${allGifts.length}개):`);
       allGifts.forEach((gift, idx) => {
         const metadata = gift.metadata || {};
-        const name = metadata.name || metadata.product_name || gift.name || gift.id || "이름 없음";
+        const name =
+          metadata.name ||
+          metadata.product_name ||
+          gift.name ||
+          gift.id ||
+          "이름 없음";
         const category = metadata.category || "카테고리 없음";
         const price = metadata.price || gift.price || "가격 정보 없음";
         const brand = metadata.brand || gift.brand || "브랜드 없음";
-        
+
         console.log(`\n   ${idx + 1}. [${gift.source || "unknown"}] ${name}`);
         console.log(`      ID: ${gift.id || "없음"}`);
         console.log(`      카테고리: ${category}`);
@@ -620,7 +658,9 @@ router.post(
           console.log(`      유사도: ${gift.similarity}`);
         }
         if (metadata.url || metadata.link || gift.url) {
-          console.log(`      URL: ${metadata.url || metadata.link || gift.url}`);
+          console.log(
+            `      URL: ${metadata.url || metadata.link || gift.url}`
+          );
         }
       });
 
@@ -992,6 +1032,7 @@ router.post(
       }
 
       // Step 3: 네이버 쇼핑 검색 (LLM 키워드 추출 사용)
+      const step3StartTime = Date.now();
       if (includeNaver) {
         console.log("\n[Step 3] 네이버 쇼핑 검색 시작...");
         try {
@@ -1010,103 +1051,94 @@ router.post(
           const searchedKeywords = [];
           const failedKeywords = []; // 실패한 키워드 추적
 
-          // 키워드 검색 함수 (최소 3개 결과 보장)
+          // 딜레이 유틸리티 함수
+          const sleep = (ms) =>
+            new Promise((resolve) => setTimeout(resolve, ms));
+
+          // 키워드 검색 함수 (최소 결과 보장, 재시도는 여기서만 처리)
           const searchWithKeyword = async (keyword, minResults = 3) => {
             try {
-              let currentResults = [];
-              let attempts = 0;
-              const maxAttempts = 3;
-              
-              // 최소 3개 결과를 얻을 때까지 재시도
-              while (currentResults.length < minResults && attempts < maxAttempts) {
-                attempts++;
-                const display = attempts === 1 ? minResults : Math.min(minResults * 2, 100);
-                
-                console.log(`   → 네이버 검색 중: "${keyword}" (시도 ${attempts}/${maxAttempts}, display=${display})`);
-                
+              const keywordSearchStartTime = Date.now();
+              let bestResults = [];
+              const strategies = [
+                { display: 30, sort: "sim", desc: "정확도순 (display=30)" },
+                { display: 50, sort: "sim", desc: "정확도순 (display=50)" },
+                { display: 50, sort: "date", desc: "날짜순" },
+              ];
+
+              for (let i = 0; i < strategies.length; i++) {
+                const strategy = strategies[i];
+
+                // Rate Limit 방지를 위한 딜레이 (첫 시도 제외)
+                if (i > 0) {
+                  await sleep(300);
+                }
+
+                console.log(
+                  `   → 네이버 검색 중: "${keyword}" (전략 ${i + 1}/${
+                    strategies.length
+                  }: ${strategy.desc})`
+                );
+
                 const result = await getNaverGiftRecommendations(keyword, {
-                  display: display,
-                  sort: "sim",
+                  display: strategy.display,
+                  sort: strategy.sort,
                   minPrice: minPriceWon,
                   maxPrice: maxPriceWon,
                 });
-                
-                if (result.recommendedGifts && result.recommendedGifts.length > 0) {
-                  currentResults = result.recommendedGifts;
-                  
-                  // 3개 미만이면 추가 전략 시도
-                  if (currentResults.length < minResults && attempts < maxAttempts) {
-                    console.log(`      ⚠️  결과 부족 (${currentResults.length}개/${minResults}개), 추가 전략 시도 중...`);
-                    
-                    // 전략: 가격 필터 완화 (원래 가격 범위는 유지하며 API 호출 시 필터 없이 검색)
-                    if (minPriceWon || maxPriceWon) {
-                      console.log(`         → 가격 필터 완화하여 재검색 (가격 범위는 유지: ${minPriceWon || '없음'}~${maxPriceWon || '없음'})`);
-                      // 가격 범위는 그대로 전달 (getNaverGiftRecommendations 내부에서 전략 2가 가격 필터 완화 처리)
-                      const relaxedResult = await getNaverGiftRecommendations(keyword, {
-                        display: Math.min(minResults * 2, 100),
-                        sort: "sim",
-                        minPrice: minPriceWon, // 가격 범위 유지
-                        maxPrice: maxPriceWon, // 가격 범위 유지
-                      });
-                      
-                      if (relaxedResult.recommendedGifts && relaxedResult.recommendedGifts.length > currentResults.length) {
-                        currentResults = relaxedResult.recommendedGifts;
-                        console.log(`         ✅ 가격 필터 완화 후 ${currentResults.length}개 결과 (가격 범위 내)`);
-                      }
-                    }
-                    
-                    // 여전히 부족하면 다른 정렬 방식 시도
-                    if (currentResults.length < minResults) {
-                      const alternativeSorts = ["date", "asc", "dsc"];
-                      for (const altSort of alternativeSorts) {
-                        if (currentResults.length >= minResults) break;
-                        
-                        console.log(`         → "${altSort}" 정렬로 재검색`);
-                        const altResult = await getNaverGiftRecommendations(keyword, {
-                          display: Math.min(minResults * 2, 100),
-                          sort: altSort,
-                          minPrice: minPriceWon,
-                          maxPrice: maxPriceWon,
-                        });
-                        
-                        if (altResult.recommendedGifts && altResult.recommendedGifts.length > currentResults.length) {
-                          currentResults = altResult.recommendedGifts;
-                          console.log(`         ✅ "${altSort}" 정렬로 ${currentResults.length}개 결과`);
-                          break;
-                        }
-                      }
-                    }
-                  }
-                  
-                  // 최종 결과가 있으면 추가하고 종료
-                  if (currentResults.length > 0) {
-                    naverGifts.push(...currentResults);
-                    searchedKeywords.push(keyword);
-                    console.log(`   ✅ "${keyword}": ${currentResults.length}개 결과`);
-                    
-                    // 3개 이상이거나 더 이상 시도할 전략이 없으면 종료
-                    if (currentResults.length >= minResults || attempts >= maxAttempts) {
-                      return currentResults.length > 0;
-                    }
-                  }
+
+                const currentResults = result.recommendedGifts || [];
+
+                // 더 좋은 결과가 있으면 업데이트
+                if (currentResults.length > bestResults.length) {
+                  bestResults = currentResults;
+                  console.log(`      → 결과: ${currentResults.length}개`);
                 } else {
-                  console.log(`   ⚠️  "${keyword}": 결과 없음 (시도 ${attempts}/${maxAttempts})`);
+                  console.log(
+                    `      → 결과: ${currentResults.length}개 (이전 결과 유지: ${bestResults.length}개)`
+                  );
                 }
-                
-                // 마지막 시도였고 결과가 없으면 실패 반환
-                if (attempts >= maxAttempts && currentResults.length === 0) {
-                  return false;
+
+                // 목표 개수 달성하면 즉시 종료
+                if (bestResults.length >= minResults) {
+                  console.log(
+                    `      ✅ 목표 달성 (${bestResults.length}개 >= ${minResults}개)`
+                  );
+                  break;
                 }
               }
-              
-              // 최종적으로 결과가 있으면 성공
-              return currentResults.length > 0;
+
+              // 최종 결과 처리
+              if (bestResults.length > 0) {
+                naverGifts.push(...bestResults);
+                searchedKeywords.push(keyword);
+                const keywordSearchTime = Date.now() - keywordSearchStartTime;
+
+                console.log(
+                  `   ✅ "${keyword}": 최종 ${bestResults.length}개 결과 (소요: ${keywordSearchTime}ms)`
+                );
+                bestResults.slice(0, 3).forEach((gift, idx) => {
+                  console.log(
+                    `      ${idx + 1}. ${
+                      gift.metadata?.name || "이름 없음"
+                    } - ${
+                      gift.metadata?.price_num?.toLocaleString() ||
+                      "가격 정보 없음"
+                    }원`
+                  );
+                });
+
+                return true;
+              }
+
+              console.log(`   ⚠️  "${keyword}": 결과 없음`);
+              return false;
             } catch (keywordError) {
               console.error(
                 `   ❌ "${keyword}" 검색 실패:`,
                 keywordError.message
               );
-              return false; // 실패
+              return false;
             }
           };
 
@@ -1121,20 +1153,30 @@ router.post(
 
           // 핵심 키워드만 검색 (최대 3개)
           const coreKeywords = extractedKeywords.slice(0, 3);
-          
+
           // 각 키워드 검색: 최소 3개 결과 보장
-          for (const keyword of coreKeywords) {
-            let success = await searchWithKeyword(keyword, 3); // 최소 3개 결과 요구
-            
-            // 결과가 없거나 3개 미만이면 키워드 단순화해서 재검색
+          for (let i = 0; i < coreKeywords.length; i++) {
+            const keyword = coreKeywords[i];
+
+            // 키워드 간 딜레이 (첫 키워드 제외)
+            if (i > 0) {
+              console.log(`   💤 키워드 간 딜레이 (300ms)...`);
+              await sleep(300);
+            }
+
+            let success = await searchWithKeyword(keyword, 3);
+
+            // 결과가 없으면 키워드 단순화해서 재검색
             if (!success) {
               const simplifiedKeyword = simplifyKeyword(keyword);
               if (simplifiedKeyword && simplifiedKeyword !== keyword) {
-                console.log(`      ⚠️  결과 없음 → 키워드 단순화하여 재검색: "${keyword}" → "${simplifiedKeyword}"`);
-                success = await searchWithKeyword(simplifiedKeyword, 3); // 최소 3개 결과 요구
+                console.log(
+                  `      ⚠️  결과 없음 → 키워드 단순화하여 재검색: "${keyword}" → "${simplifiedKeyword}"`
+                );
+                await sleep(300); // 단순화 재검색 전 딜레이
+                success = await searchWithKeyword(simplifiedKeyword, 3);
               }
-              
-              // 여전히 실패하면 실패 목록에 추가
+
               if (!success) {
                 failedKeywords.push(keyword);
               }
@@ -1143,24 +1185,70 @@ router.post(
 
           // 결과가 부족하면 일반 선물 키워드로 폴백
           if (naverGifts.length < 3) {
-            console.log(`   → 결과 부족 (${naverGifts.length}개), 일반 선물 키워드로 폴백 검색...`);
+            console.log(
+              `   → 결과 부족 (${naverGifts.length}개), 일반 선물 키워드로 폴백 검색...`
+            );
             const fallbackKeywords = ["선물", "기프트", "선물세트"];
-            for (const fallbackKeyword of fallbackKeywords) {
-              if (naverGifts.length >= 3) break; // 최소 3개만 확보하면 중단
-              await searchWithKeyword(fallbackKeyword, 1);
+            for (let i = 0; i < fallbackKeywords.length; i++) {
+              if (naverGifts.length >= 3) break;
+              if (i > 0) await sleep(300); // 폴백 키워드 간 딜레이
+              await searchWithKeyword(fallbackKeywords[i], 1);
             }
           }
 
           // 중복 제거는 리랭킹 단계에서 처리하므로 여기서는 제거하지 않음
+          const step3Duration = Date.now() - step3StartTime;
+
+          // ===== 네이버 검색 통계 요약 =====
+          console.log(`\n${"=".repeat(60)}`);
+          console.log(`📊 [Step 3] 네이버 쇼핑 검색 통계 요약 (recommend)`);
+          console.log(`${"=".repeat(60)}`);
+          console.log(`   ⏱️  총 소요 시간: ${step3Duration}ms`);
+          console.log(`   🔑 추출 키워드: ${extractedKeywords.length}개`);
+          console.log(`   🔍 실제 검색 키워드: ${searchedKeywords.length}개`);
+          console.log(`   ❌ 실패 키워드: ${failedKeywords.length}개`);
+          console.log(`   📦 수집 결과: ${naverGifts.length}개`);
+
+          // 실패 키워드 목록
+          if (failedKeywords.length > 0) {
+            console.log(`\n   ⚠️  실패한 키워드:`);
+            failedKeywords.forEach((kw, idx) => {
+              console.log(`      ${idx + 1}. "${kw}"`);
+            });
+          }
+
+          // 가격 분포 분석
+          if (naverGifts.length > 0) {
+            const prices = naverGifts
+              .map((g) => g.metadata?.price_num || 0)
+              .filter((p) => p > 0);
+            if (prices.length > 0) {
+              const minPrice = Math.min(...prices);
+              const maxPrice = Math.max(...prices);
+              const avgPrice = Math.round(
+                prices.reduce((a, b) => a + b, 0) / prices.length
+              );
+              console.log(`\n   💰 가격 분포:`);
+              console.log(`      최저가: ${minPrice.toLocaleString()}원`);
+              console.log(`      최고가: ${maxPrice.toLocaleString()}원`);
+              console.log(`      평균가: ${avgPrice.toLocaleString()}원`);
+            }
+          }
+          console.log(`${"=".repeat(60)}\n`);
+
           searchResults.naver = {
             success: true,
-            gifts: naverGifts, // 중복 제거하지 않고 모두 포함
+            gifts: naverGifts,
             count: naverGifts.length,
             extractedKeywords,
             searchedKeywords,
+            failedKeywords,
+            timing: {
+              total: step3Duration,
+            },
           };
           console.log(
-            `✅ [Step 3] 네이버 검색 완료: ${naverGifts.length}개 결과 (중복은 리랭킹 단계에서 처리)`
+            `✅ [Step 3] 네이버 검색 완료: ${naverGifts.length}개 결과 (${step3Duration}ms)`
           );
           console.log(`   사용된 키워드: ${searchedKeywords.join(", ")}`);
         } catch (error) {
