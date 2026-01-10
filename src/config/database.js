@@ -168,6 +168,38 @@ const createTables = async () => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Preference Profile 테이블
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS preference_profile (
+        business_card_id INT PRIMARY KEY,
+        likes JSON NULL,
+        dislikes JSON NULL,
+        uncertain JSON NULL,
+        last_source_count INT DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (business_card_id) REFERENCES business_cards(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Preference Event 테이블
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS preference_event (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        business_card_id INT NOT NULL,
+        memo_id INT NOT NULL,
+        polarity ENUM('like','dislike','uncertain') NOT NULL,
+        item VARCHAR(255) NOT NULL,
+        evidence TEXT NOT NULL,
+        confidence FLOAT DEFAULT 0.5,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (business_card_id) REFERENCES business_cards(id) ON DELETE CASCADE,
+        FOREIGN KEY (memo_id) REFERENCES memo(id) ON DELETE CASCADE,
+        INDEX idx_business_card_id (business_card_id),
+        INDEX idx_memo_id (memo_id),
+        INDEX idx_polarity (polarity)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     connection.release();
     console.log("✅ Database tables created/verified successfully");
   } catch (error) {

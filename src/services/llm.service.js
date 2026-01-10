@@ -1209,6 +1209,114 @@ const extractKeywordsFallback = (personaData, userQuery = "") => {
 };
 
 /**
+ * Extract preferences from memo content using LLM
+ * Only extracts explicit expressions, no inference
+ */
+export const extractPreferencesFromMemo = async (memoContent) => {
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn("OPENAI_API_KEY not configured, returning empty preferences");
+    return { likes: [], dislikes: [], uncertain: [] };
+  }
+
+  try {
+    const prompt = `다음 메모 텍스트에서 명시적으로 표현된 선호도만 추출하세요.
+
+규칙:
+1. 다음 키워드가 명시적으로 언급된 경우만 추출: 좋아한다, 좋아함, 선호, 자주 마심, 즐겨, 싫어, 별로, 못 먹, 피함, 부담스러워, 거부함
+2. 건강, 정치, 종교, 성적 취향, 인종 등 민감한 속성은 추론하지 말 것
+3. 애매하거나 추론이 필요한 경우는 uncertain에 분류
+4. 모든 preference는 메모 텍스트에서 직접 복사한 증거(evidence)를 포함해야 함
+5. 추측이나 환각 금지 - 메모에 명시되지 않은 것은 추출하지 말 것
+
+메모 텍스트:
+${memoContent}
+
+응답 형식 (JSON only):
+{
+  "likes": [{"item": "항목명", "evidence": ["증거 문장1", "증거 문장2"], "weight": 0.8}],
+  "dislikes": [{"item": "항목명", "evidence": ["증거 문장"], "weight": 0.9}],
+  "uncertain": [{"item": "항목명", "evidence": ["증거 문장"], "weight": 0.5}]
+}
+
+JSON만 반환하고 다른 설명은 포함하지 마세요.`;
+
+    const messages = [
+      {
+        role: "system",
+        content: "You are a preference extraction system that only extracts explicit preferences from text. Never infer or guess. Return only valid JSON."
+      },
+      {
+        role: "user",
+        content: prompt
+      }
+    ];
+
+    const response = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-4o-mini",
+        messages: messages,
+        temperature: 0.1,
+        response_format: { type: "json_object" }
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+      }
+    );
+
+    if (response.data.choices && response.data.choices.length > 0) {
+      const content = response.data.choices[0].message.content.trim();
+      
+      // Try to parse JSON (might be wrapped in code blocks or plain JSON)
+      let parsed;
+      try {
+        // Remove markdown code blocks if present
+        const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        parsed = JSON.parse(cleanedContent);
+      } catch (parseError) {
+        console.error('Failed to parse LLM response as JSON:', content);
+        return { likes: [], dislikes: [], uncertain: [] };
+      }
+      
+      // Validate and normalize structure
+      const normalizeItem = (item) => {
+        if (typeof item === 'string') {
+          return { item, evidence: [item], weight: 0.7 };
+        }
+        if (typeof item === 'object' && item.item) {
+          return {
+            item: String(item.item),
+            evidence: Array.isArray(item.evidence) ? item.evidence.map(String) : [String(item.evidence || '')],
+            weight: typeof item.weight === 'number' ? item.weight : 0.7
+          };
+        }
+        return null;
+      };
+
+      const normalizeArray = (arr) => {
+        if (!Array.isArray(arr)) return [];
+        return arr.map(normalizeItem).filter(item => item && item.item.trim());
+      };
+      
+      return {
+        likes: normalizeArray(parsed.likes || []),
+        dislikes: normalizeArray(parsed.dislikes || []),
+        uncertain: normalizeArray(parsed.uncertain || [])
+      };
+    }
+
+    throw new Error("OpenAI API returned no choices");
+  } catch (error) {
+    console.error("Preference extraction error:", error);
+    // Return empty preferences on error
+    return { likes: [], dislikes: [], uncertain: [] };
+  }
+};
+
+/**
  * Mock LLM response for development
  */
 const mockLLMResponse = () => {
