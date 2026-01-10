@@ -14,7 +14,13 @@ class Event {
     query += ' ORDER BY startDate ASC';
 
     const [rows] = await pool.query(query, params);
-    return rows;
+    
+    // Convert participants and linked_card_ids for each event
+    return rows.map(event => ({
+      ...event,
+      participants: event.participants ? event.participants.split(', ').filter(p => p) : [],
+      linkedCardIds: event.linked_card_ids ? event.linked_card_ids.split(',').map(id => parseInt(id)).filter(id => !isNaN(id)) : []
+    }));
   }
 
   // Find event by ID
