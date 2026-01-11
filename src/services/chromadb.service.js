@@ -1,4 +1,5 @@
 import { getOrCreateCollection } from "../config/chromadb.js";
+import { logger } from "../utils/logger.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -57,7 +58,7 @@ const parseCSV = (csvPath) => {
 
     return data;
   } catch (error) {
-    console.error("❌ CSV 파싱 오류:", error.message);
+    logger.error("CSV 파싱 오류", error);
     throw error;
   }
 };
@@ -268,7 +269,7 @@ const searchSimilarGifts = async (
       documents: [results.documents?.[0]?.slice(0, nResults) || []],
     };
   } catch (error) {
-    console.error("❌ ChromaDB 검색 오류:", error.message);
+    logger.error("ChromaDB 검색 오류", error);
     throw error;
   }
 };

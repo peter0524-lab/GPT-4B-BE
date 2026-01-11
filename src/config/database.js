@@ -1,5 +1,6 @@
 import mysql from "mysql2/promise";
 import dotenv from "dotenv";
+import { logger } from "../utils/logger.js";
 
 dotenv.config();
 
@@ -23,11 +24,11 @@ const pool = mysql.createPool({
 const testConnection = async () => {
   try {
     const connection = await pool.getConnection();
-    console.log("✅ MySQL connected successfully");
+    logger.info("MySQL connected successfully");
     connection.release();
     return true;
   } catch (error) {
-    console.error("❌ MySQL connection error:", error.message);
+    logger.error("MySQL connection error", error);
     return false;
   }
 };
@@ -201,9 +202,9 @@ const createTables = async () => {
     `);
 
     connection.release();
-    console.log("✅ Database tables created/verified successfully");
+    logger.info("Database tables created/verified successfully");
   } catch (error) {
-    console.error("❌ Error creating tables:", error.message);
+    logger.error("Error creating tables", error);
     throw error;
   }
 };

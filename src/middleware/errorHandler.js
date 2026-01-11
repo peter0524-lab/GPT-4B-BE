@@ -1,5 +1,7 @@
+import { logger } from '../utils/logger.js';
+
 export const errorHandler = (err, req, res, next) => {
-  console.error('Error:', err);
+  logger.error('Error handler', err);
 
   // Mongoose validation error
   if (err.name === 'ValidationError') {
@@ -59,7 +61,7 @@ export const errorHandler = (err, req, res, next) => {
   try {
     res.status(statusCode).json(errorResponse);
   } catch (sendError) {
-    console.error('Failed to send error response:', sendError);
+    logger.error('Failed to send error response', sendError);
     // 최후의 수단: 텍스트 응답
     if (!res.headersSent) {
       res.status(statusCode).send(JSON.stringify(errorResponse));

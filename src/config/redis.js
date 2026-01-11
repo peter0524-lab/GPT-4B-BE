@@ -1,3 +1,5 @@
+import { logger } from '../utils/logger.js';
+
 /**
  * Redis 클라이언트 설정
  * Redis가 없어도 동작하도록 optional 처리
@@ -15,7 +17,7 @@ if (process.env.REDIS_URL || process.env.REDIS_HOST) {
     //   password: process.env.REDIS_PASSWORD,
     // });
   } catch (error) {
-    console.warn('Redis client initialization failed:', error.message);
+    logger.warn('Redis client initialization failed', error);
   }
 }
 

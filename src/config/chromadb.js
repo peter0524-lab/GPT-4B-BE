@@ -1,5 +1,6 @@
 import { ChromaClient } from "chromadb";
 import dotenv from "dotenv";
+import { logger } from "../utils/logger.js";
 
 dotenv.config();
 
@@ -15,10 +16,10 @@ const COLLECTION_NAME = "gift_embeddings";
 const testConnection = async () => {
   try {
     await chromaClient.heartbeat();
-    console.log("✅ ChromaDB connected successfully");
+    logger.info("ChromaDB connected successfully");
     return true;
   } catch (error) {
-    console.error("❌ ChromaDB connection error:", error.message);
+    logger.error("ChromaDB connection error", error);
     return false;
   }
 };
@@ -56,7 +57,7 @@ const getOrCreateCollection = async () => {
       throw error;
     }
   } catch (error) {
-    console.error("❌ Error getting/creating collection:", error.message);
+    logger.error("Error getting/creating collection", error);
     throw error;
   }
 };

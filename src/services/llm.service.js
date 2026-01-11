@@ -20,7 +20,7 @@ export const processLLMChat = async (messages, provider = "gpt") => {
       );
     }
   } catch (error) {
-    console.error("LLM Service Error:", error);
+    logger.error("LLM Service Error", error);
     throw new Error("LLM processing failed");
   }
 };

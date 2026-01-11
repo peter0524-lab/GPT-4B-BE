@@ -331,11 +331,7 @@ router.post(
           count: 0,
           error: error.message,
         };
-        console.error(
-          `❌ [Step 2] ChromaDB 검색 실패 (소요: ${step2Time}ms):`,
-          error.message
-        );
-        console.error(`   스택:`, error.stack);
+        logger.gift.error(`[Step 2] ChromaDB 검색 실패 (소요: ${step2Time}ms)`, error);
       }
 
       // ========================================
@@ -461,10 +457,7 @@ router.post(
             console.log(`      ⚠️  "${keyword}": 결과 없음`);
             return false;
           } catch (keywordError) {
-            console.error(
-              `      ❌ "${keyword}" 검색 실패:`,
-              keywordError.message
-            );
+            logger.gift.error(`"${keyword}" 검색 실패`, keywordError);
             return false;
           }
         };
@@ -644,11 +637,7 @@ router.post(
           count: 0,
           error: error.message,
         };
-        console.error(
-          `❌ [Step 3] 네이버 검색 실패 (소요: ${step3Time}ms):`,
-          error.message
-        );
-        console.error(`   스택:`, error.stack);
+        logger.gift.error(`[Step 3] 네이버 검색 실패 (소요: ${step3Time}ms)`, error);
       }
 
       // ========================================
@@ -795,12 +784,7 @@ router.post(
 
       res.json(result);
     } catch (error) {
-      console.error("\n==========================================");
-      console.error("❌ [선물 검색] 오류 발생");
-      console.error("==========================================");
-      console.error("에러 메시지:", error.message);
-      console.error("스택 트레이스:", error.stack);
-      console.error("==========================================\n");
+      logger.gift.error("[선물 검색] 오류 발생", error);
       res.status(500).json({
         success: false,
         message: error.message || "선물 검색에 실패했습니다.",
@@ -876,7 +860,7 @@ router.post(
       console.log("\n[명함 조회] 명함 정보 조회 중...");
       const card = await BusinessCard.findById(cardId, req.user.id);
       if (!card) {
-        console.error("❌ 명함을 찾을 수 없습니다.");
+        logger.error("명함을 찾을 수 없습니다", { cardId, userId: req.user.id });
         return res.status(404).json({
           success: false,
           message: "명함을 찾을 수 없습니다.",
@@ -899,7 +883,7 @@ router.post(
           });
         }
       } catch (memoError) {
-        console.error("⚠️  메모 조회 실패:", memoError.message);
+        logger.warn("메모 조회 실패", memoError);
         // 메모 조회 실패해도 계속 진행 (빈 배열 사용)
       }
 
@@ -1005,7 +989,7 @@ router.post(
           success: false,
           error: error.message,
         };
-        console.error("❌ [Step 2] ChromaDB 검색 실패:", error.message);
+        logger.gift.error("[Step 2] ChromaDB 검색 실패", error);
       }
 
       // Step 3: 네이버 쇼핑 검색 (LLM 키워드 추출 사용)
@@ -1233,7 +1217,7 @@ router.post(
             success: false,
             error: error.message,
           };
-          console.error("❌ [Step 3] 네이버 검색 실패:", error.message);
+          logger.gift.error("[Step 3] 네이버 검색 실패", error);
         }
       } else {
         console.log("\n[Step 3] 네이버 검색 건너뜀 (includeNaver=false)");
@@ -1303,12 +1287,7 @@ router.post(
         },
       });
     } catch (error) {
-      console.error("\n==========================================");
-      console.error("❌ [명함 기반 선물 추천] 오류 발생");
-      console.error("==========================================");
-      console.error("에러 메시지:", error.message);
-      console.error("스택 트레이스:", error.stack);
-      console.error("==========================================\n");
+      logger.gift.error("[명함 기반 선물 추천] 오류 발생", error);
       res.status(500).json({
         success: false,
         message: error.message || "선물 추천에 실패했습니다.",
@@ -1396,12 +1375,7 @@ router.get(
         },
       });
     } catch (error) {
-      console.error("\n==========================================");
-      console.error("❌ [네이버 쇼핑 검색] 오류 발생 (GET)");
-      console.error("==========================================");
-      console.error("에러 메시지:", error.message);
-      console.error("스택 트레이스:", error.stack);
-      console.error("==========================================\n");
+      logger.gift.error("[네이버 쇼핑 검색] 오류 발생 (GET)", error);
       res.status(500).json({
         success: false,
         message: error.message || "네이버 쇼핑 검색에 실패했습니다.",
@@ -1485,12 +1459,7 @@ router.post(
         },
       });
     } catch (error) {
-      console.error("\n==========================================");
-      console.error("❌ [네이버 쇼핑 검색] 오류 발생 (POST)");
-      console.error("==========================================");
-      console.error("에러 메시지:", error.message);
-      console.error("스택 트레이스:", error.stack);
-      console.error("==========================================\n");
+      logger.gift.error("[네이버 쇼핑 검색] 오류 발생 (POST)", error);
       res.status(500).json({
         success: false,
         message: error.message || "네이버 쇼핑 검색에 실패했습니다.",

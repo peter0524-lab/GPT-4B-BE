@@ -18,6 +18,7 @@ import preferenceRoutes from "./routes/preference.routes.js";
 // Middleware
 import { errorHandler } from "./middleware/errorHandler.js";
 import { notFound } from "./middleware/notFound.js";
+import { logger } from "./utils/logger.js";
 
 // Database
 import { testConnection, createTables } from "./config/database.js";
@@ -85,7 +86,7 @@ app.use(errorHandler);
 const initializeDatabase = async () => {
   const isConnected = await testConnection();
   if (!isConnected) {
-    console.error("❌ Failed to connect to database");
+    logger.error("Failed to connect to database");
     process.exit(1);
   }
 
@@ -94,16 +95,17 @@ const initializeDatabase = async () => {
 
   // Start server - 0.0.0.0으로 바인딩하여 외부 접속 허용
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server is running on port ${PORT}`);
-    console.log(`📝 Environment: ${process.env.NODE_ENV || "development"}`);
-    console.log(`🌐 Server accessible from: http://0.0.0.0:${PORT}`);
-    console.log(`💡 Local access: http://localhost:${PORT}`);
-    console.log(`📱 Network access: http://<your-ip>:${PORT}`);
+    logger.info("Server is running", {
+      port: PORT,
+      environment: process.env.NODE_ENV || "development",
+      localAccess: `http://localhost:${PORT}`,
+      networkAccess: `http://0.0.0.0:${PORT}`,
+    });
   });
 };
 
 initializeDatabase().catch((error) => {
-  console.error("❌ Database initialization error:", error);
+  logger.error("Database initialization error", error);
   process.exit(1);
 });
 

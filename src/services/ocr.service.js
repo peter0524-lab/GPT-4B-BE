@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { logger } from '../utils/logger.js';
 
 /**
  * Process OCR from base64 image
@@ -21,7 +22,7 @@ export const processOCR = async (base64Image) => {
     // Fallback: Mock response for development
     return mockOCRResponse();
   } catch (error) {
-    console.error('OCR Service Error:', error);
+    logger.error('OCR Service Error', error);
     throw new Error('OCR processing failed');
   }
 };

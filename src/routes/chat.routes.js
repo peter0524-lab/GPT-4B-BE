@@ -3,6 +3,7 @@ import { body, validationResult } from "express-validator";
 import Chat from "../models/Chat.model.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { processLLMChat } from "../services/llm.service.js";
+import { logger } from "../utils/logger.js";
 
 const router = express.Router();
 
@@ -74,13 +75,13 @@ router.post(
       }
 
       const { message, llmProvider = "gpt", chatId } = req.body;
-      console.log("Chat request:", { message: message?.substring(0, 50), llmProvider, chatId, userId: req.user.id });
+      logger.info("Chat request", { message: message?.substring(0, 50), llmProvider, chatId, userId: req.user.id });
 
       let chat;
 
       if (chatId) {
         // Continue existing chat
-        console.log("Finding existing chat:", chatId);
+        logger.debug("Finding existing chat", { chatId });
         chat = await Chat.findById(chatId, req.user.id);
 
         if (!chat) {
@@ -89,17 +90,17 @@ router.post(
             message: "Chat not found",
           });
         }
-        console.log("Found existing chat:", chat.id);
+        logger.debug("Found existing chat", { chatId: chat.id });
       } else {
         // Create new chat
-        console.log("Creating new chat");
+        logger.debug("Creating new chat");
         chat = await Chat.create({
           userId: req.user.id,
           llmProvider,
           messages: [],
           title: message.substring(0, 50), // Use first 50 chars as title
         });
-        console.log("Created new chat:", chat.id);
+        logger.info("Created new chat", { chatId: chat.id });
       }
 
       // Add user message
@@ -112,12 +113,11 @@ router.post(
       // Get LLM response
       let llmResponse;
       try {
-        console.log("Calling LLM with messages:", chat.messages.length, "messages");
+        logger.debug("Calling LLM", { messageCount: chat.messages.length, llmProvider });
         llmResponse = await processLLMChat(chat.messages, llmProvider);
-        console.log("LLM response received, length:", llmResponse?.length);
+        logger.debug("LLM response received", { length: llmResponse?.length });
       } catch (llmError) {
-        console.error("LLM processing error:", llmError);
-        console.error("LLM error stack:", llmError.stack);
+        logger.error("LLM processing error", llmError);
         return res.status(500).json({
           success: false,
           message: llmError.message || "LLM 처리 중 오류가 발생했습니다.",
@@ -133,18 +133,13 @@ router.post(
 
       // Update chat with new messages
       try {
-        console.log("Updating chat with", chat.messages.length, "messages");
-        console.log("Messages before update:", JSON.stringify(chat.messages, null, 2));
+        logger.debug("Updating chat", { chatId: chat.id, messageCount: chat.messages.length });
         chat = await Chat.update(chat.id, req.user.id, {
           messages: chat.messages,
         });
-        console.log("Chat updated successfully");
-        console.log("Chat after update:", JSON.stringify(chat, null, 2));
-        console.log("Chat messages type:", typeof chat.messages);
-        console.log("Chat messages is array:", Array.isArray(chat.messages));
+        logger.debug("Chat updated successfully", { chatId: chat.id });
       } catch (updateError) {
-        console.error("Chat update error:", updateError);
-        console.error("Update error stack:", updateError.stack);
+        logger.error("Chat update error", updateError);
         return res.status(500).json({
           success: false,
           message: `채팅 저장 중 오류가 발생했습니다: ${updateError.message}`,
@@ -156,17 +151,14 @@ router.post(
         try {
           chat.messages = JSON.parse(chat.messages);
         } catch (parseError) {
-          console.error("Failed to parse messages in response:", parseError);
+          logger.error("Failed to parse messages in response", parseError);
         }
       }
 
-      console.log("Final chat object before sending:", {
+      logger.debug("Final chat object before sending", {
         id: chat.id,
         messagesCount: Array.isArray(chat.messages) ? chat.messages.length : 'not array',
         messagesType: typeof chat.messages,
-        lastMessage: Array.isArray(chat.messages) && chat.messages.length > 0 
-          ? chat.messages[chat.messages.length - 1] 
-          : null
       });
 
       res.json({
@@ -174,13 +166,7 @@ router.post(
         data: chat,
       });
     } catch (error) {
-      console.error("Chat route error:", error);
-      console.error("Error stack:", error.stack);
-      console.error("Error details:", {
-        name: error.name,
-        message: error.message,
-        code: error.code,
-      });
+      logger.error("Chat route error", error);
       res.status(500).json({
         success: false,
         message: error.message || "서버 오류가 발생했습니다.",
@@ -227,7 +213,7 @@ router.post("/create-history", [
       data: chat,
     });
   } catch (error) {
-    console.error("Create chat history error:", error);
+    logger.error("Create chat history error", error);
     res.status(500).json({
       success: false,
       message: error.message || "대화 내역 저장 중 오류가 발생했습니다.",

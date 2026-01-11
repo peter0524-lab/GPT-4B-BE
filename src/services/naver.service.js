@@ -1,4 +1,5 @@
 import axios from "axios";
+import { logger } from "../utils/logger.js";
 
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "gUrltWt5A39qWZP0UzQn";
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "CjH7SHpY10";
@@ -20,13 +21,13 @@ const resetStatsIfNeeded = () => {
   const now = Date.now();
   if (now - apiStats.lastResetTime > 60000) {
     // 1분마다 리셋
-    console.log("\n📊 [네이버 API 통계 (최근 1분)]");
-    console.log(`   총 호출: ${apiStats.totalCalls}회`);
-    console.log(`   성공: ${apiStats.successCalls}회`);
-    console.log(`   실패: ${apiStats.failedCalls}회`);
-    console.log(`   재시도: ${apiStats.retryCalls}회`);
-    console.log(`   Rate Limit: ${apiStats.rateLimitHits}회`);
-    console.log("");
+    logger.debug("네이버 API 통계 (최근 1분)", {
+      totalCalls: apiStats.totalCalls,
+      successCalls: apiStats.successCalls,
+      failedCalls: apiStats.failedCalls,
+      retryCalls: apiStats.retryCalls,
+      rateLimitHits: apiStats.rateLimitHits,
+    });
 
     apiStats = {
       totalCalls: 0,
@@ -77,9 +78,7 @@ export const searchNaverShopping = async (
     .substr(2, 5)}`;
   const startTime = Date.now();
 
-  console.log(`\n🔍 [${getTimestamp()}] 네이버 API 호출 시작 [${requestId}]`);
-  console.log(`   📝 검색어: "${query}"`);
-  console.log(`   📊 파라미터: display=${display}, sort=${sort}`);
+  logger.debug("네이버 API 호출 시작", { requestId, query, display, sort });
 
   apiStats.totalCalls++;
 
@@ -135,16 +134,19 @@ export const searchNaverShopping = async (
   try {
     const result = await makeRequest(false);
     const totalDuration = Date.now() - startTime;
-    console.log(`   ⏱️  총 소요 시간: ${totalDuration}ms [${requestId}]`);
+    logger.debug("네이버 API 호출 완료", { requestId, totalDuration });
     return result;
   } catch (error) {
     const status = error.response?.status;
     const reqDuration = error.reqDuration || 0;
 
-    console.log(`   ❌ API 오류 발생 (${reqDuration}ms)`);
-    console.log(`      → 상태 코드: ${status || "N/A"}`);
-    console.log(`      → 에러 코드: ${error.code || "N/A"}`);
-    console.log(`      → 메시지: ${error.message}`);
+    logger.warn("API 오류 발생", {
+      requestId,
+      reqDuration,
+      status: status || "N/A",
+      code: error.code || "N/A",
+      message: error.message,
+    });
 
     const isRetryable =
       status === 429 ||
@@ -155,36 +157,34 @@ export const searchNaverShopping = async (
 
     if (status === 429) {
       apiStats.rateLimitHits++;
-      console.log(`   🚫 Rate Limit 감지! (총 ${apiStats.rateLimitHits}회)`);
+      logger.warn("Rate Limit 감지", { requestId, totalHits: apiStats.rateLimitHits });
     }
 
     if (isRetryable) {
       apiStats.retryCalls++;
-      console.log(`   🔄 재시도 대기 중... (500ms)`);
+      logger.debug("재시도 대기 중", { requestId, delay: 500 });
       await sleep(500);
 
       try {
         const retryResult = await makeRequest(true);
         const totalDuration = Date.now() - startTime;
-        console.log(
-          `   ⏱️  총 소요 시간: ${totalDuration}ms (재시도 포함) [${requestId}]`
-        );
+        logger.debug("재시도 성공", { requestId, totalDuration });
         return retryResult;
       } catch (retryError) {
         apiStats.failedCalls++;
         const retryStatus = retryError.response?.status;
-        console.log(`   ❌ 재시도 실패`);
-        console.log(`      → 상태 코드: ${retryStatus || "N/A"}`);
-        console.log(`      → 에러: ${retryError.message}`);
+        logger.error("재시도 실패", {
+          requestId,
+          status: retryStatus || "N/A",
+          message: retryError.message,
+        });
 
         if (retryStatus === 429) {
           apiStats.rateLimitHits++;
         }
 
         const totalDuration = Date.now() - startTime;
-        console.log(
-          `   ⏱️  총 소요 시간: ${totalDuration}ms (실패) [${requestId}]`
-        );
+        logger.debug("네이버 API 호출 실패 (재시도 포함)", { requestId, totalDuration });
 
         return {
           items: [],
@@ -198,13 +198,11 @@ export const searchNaverShopping = async (
 
     apiStats.failedCalls++;
     const totalDuration = Date.now() - startTime;
-    console.log(
-      `   ⏱️  총 소요 시간: ${totalDuration}ms (실패, 재시도 불가) [${requestId}]`
-    );
-
-    if (error.response?.data) {
-      console.log(`      → 응답 데이터:`, error.response.data);
-    }
+    logger.error("네이버 API 호출 실패 (재시도 불가)", {
+      requestId,
+      totalDuration,
+      responseData: error.response?.data,
+    });
 
     return { items: [], total: 0, start: 1, display: 0, lastBuildDate: null };
   }
@@ -311,7 +309,7 @@ export const getNaverGiftRecommendations = async (query, options = {}) => {
   let gifts = formatNaverResultsAsGifts(naverItems);
   const beforeFilterCount = gifts.length;
 
-  console.log(`   📋 형식 변환 완료: ${beforeFilterCount}개`);
+  logger.debug("형식 변환 완료", { beforeFilterCount });
 
   // 가격 필터링
   if (minPrice !== null || maxPrice !== null) {
