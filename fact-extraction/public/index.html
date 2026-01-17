@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fact Extraction Pipeline</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+KR:wght@300;400;500;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --bg-card: #14141c;
+            --border-color: #2a2a3a;
+            --text-primary: #e8e8f0;
+            --text-secondary: #9090a0;
+            --text-muted: #606070;
+            --accent-blue: #6366f1;
+            --accent-green: #10b981;
+            --accent-orange: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-purple: #a855f7;
+            --accent-cyan: #06b6d4;
+            --gradient-1: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            --gradient-2: linear-gradient(135deg, #06b6d4 0%, #10b981 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+
+        header {
+            text-align: center;
+            padding: 2rem 0;
+            margin-bottom: 1.5rem;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            background: var(--gradient-1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 0.75rem;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .tab-btn.active {
+            color: white;
+            background: var(--gradient-1);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-header h2 {
+            font-size: 0.95rem;
+        }
+
+        .card-body {
+            padding: 1rem;
+        }
+
+        .mode-toggle {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .mode-btn:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .mode-btn.active {
+            border-color: var(--accent-green);
+            background: rgba(16, 185, 129, 0.15);
+        }
+
+        .mode-btn .icon {
+            font-size: 1.5rem;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .domain-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .domain-btn {
+            padding: 0.75rem;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .domain-btn:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .domain-btn.selected {
+            border-color: var(--accent-blue);
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .existing-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .existing-card {
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .existing-card:hover {
+            border-color: var(--accent-purple);
+            transform: translateY(-2px);
+        }
+
+        .existing-card.selected {
+            border-color: var(--accent-green);
+            background: rgba(16, 185, 129, 0.15);
+        }
+
+        .existing-card-name {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .existing-card-info {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .existing-card-stats {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .existing-card-stat {
+            font-size: 0.7rem;
+            background: var(--bg-primary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            color: var(--accent-cyan);
+        }
+
+        .scenario-options {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .scenario-option {
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .scenario-option:hover {
+            border-color: var(--accent-purple);
+        }
+
+        .scenario-option.selected {
+            border-color: var(--accent-green);
+            background: rgba(16, 185, 129, 0.15);
+        }
+
+        .scenario-option-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .scenario-option-desc {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .contact-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            margin-top: 0.5rem;
+        }
+
+        .contact-tag {
+            font-size: 0.7rem;
+            background: var(--bg-primary);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            color: var(--text-secondary);
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--gradient-1);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-success {
+            background: var(--gradient-2);
+            color: white;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .scenario-preview {
+            width: 100%;
+            min-height: 180px;
+            padding: 1rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            resize: vertical;
+        }
+
+        .scenario-preview:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .preview-cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .preview-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .preview-card-header {
+            padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .preview-card-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--gradient-1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        .preview-card-info h3 {
+            font-size: 0.95rem;
+        }
+
+        .preview-card-info p {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .preview-card-body {
+            padding: 0.75rem 1rem;
+        }
+
+        .preview-section {
+            margin-bottom: 0.75rem;
+        }
+
+        .preview-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .preview-section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--accent-cyan);
+            margin-bottom: 0.4rem;
+        }
+
+        .preview-section-count {
+            background: var(--accent-cyan);
+            color: white;
+            padding: 0.1rem 0.35rem;
+            border-radius: 8px;
+            font-size: 0.65rem;
+        }
+
+        .preview-item {
+            background: var(--bg-primary);
+            border-radius: 4px;
+            padding: 0.5rem 0.6rem;
+            margin-bottom: 0.3rem;
+            font-size: 0.75rem;
+        }
+
+        .preview-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .preview-item-title {
+            font-weight: 500;
+        }
+
+        .preview-item-meta {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+        }
+
+        .status-panel {
+            margin-bottom: 1rem;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            margin-bottom: 0.3rem;
+            font-size: 0.8rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-dot.pending {
+            background: var(--text-muted);
+        }
+
+        .status-dot.running {
+            background: var(--accent-orange);
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-dot.success {
+            background: var(--accent-green);
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        .status-label {
+            flex: 1;
+        }
+
+        .status-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--accent-cyan);
+            background: var(--bg-primary);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+        }
+
+        .log-output {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.75rem;
+            height: 180px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+        }
+
+        .log-line {
+            margin-bottom: 0.15rem;
+        }
+
+        .log-line.info {
+            color: var(--text-secondary);
+        }
+
+        .log-line.success {
+            color: var(--accent-green);
+        }
+
+        .log-line.error {
+            color: var(--accent-red);
+        }
+
+        .log-timestamp {
+            color: var(--text-muted);
+            margin-right: 0.5rem;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .result-box {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 0.75rem;
+            text-align: center;
+        }
+
+        .result-box-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 600;
+            background: var(--gradient-1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .result-box-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        @media (max-width: 900px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+
+            .domain-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .chart-container {
+            position: relative;
+            height: 200px;
+        }
+
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        .stats-table th,
+        .stats-table td {
+            padding: 0.5rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stats-table th {
+            background: var(--bg-tertiary);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        .word-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .word-tag {
+            padding: 0.25rem 0.5rem;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .word-tag.large {
+            color: var(--accent-blue);
+            background: rgba(99, 102, 241, 0.2);
+        }
+
+        .word-tag.medium {
+            color: var(--accent-cyan);
+        }
+
+        .word-tag.small {
+            color: var(--text-secondary);
+        }
+
+        .warning-box {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--accent-green);
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            font-size: 0.8rem;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 0.4rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--gradient-1);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>🔮 Fact Extraction Pipeline</h1>
+            <p>시나리오 기반 데이터 생성 → 미리보기 → 저장 → Fact 추출</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="scenario">📝 데이터 생성</button>
+            <button class="tab-btn" data-tab="analysis">📊 분포 분석</button>
+        </div>
+
+        <!-- Tab: Scenario -->
+        <div id="tab-scenario" class="tab-content active">
+            <!-- Mode Selection -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>모드 선택</h2>
+                </div>
+                <div class="card-body">
+                    <div class="mode-toggle">
+                        <button class="mode-btn active" data-mode="new">
+                            <span class="icon">✨</span>
+                            새 시나리오 생성
+                        </button>
+                        <button class="mode-btn" data-mode="existing">
+                            <span class="icon">👤</span>
+                            기존 명함 선택
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NEW MODE: Scenario Generation -->
+            <div id="newMode">
+                <div class="card" id="step1Card">
+                    <div class="card-header">
+                        <h2>1️⃣ 도메인 선택</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="domain-grid">
+                            <button class="domain-btn selected" data-domain="비즈니스">💼 비즈니스</button>
+                            <button class="domain-btn" data-domain="개인">👥 개인</button>
+                            <button class="domain-btn" data-domain="영업">📈 영업</button>
+                            <button class="domain-btn" data-domain="창작">🎨 창작</button>
+                        </div>
+                        <button id="generateOptionsBtn" class="btn btn-primary" style="width:100%;">
+                            <span id="generateOptionsBtnText">🎲 시나리오 옵션 생성</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card" id="step2Card" style="display:none;">
+                    <div class="card-header">
+                        <h2>2️⃣ 시나리오 선택</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="scenario-options" id="scenarioOptions"></div>
+                        <div class="btn-group">
+                            <button id="backToStep1" class="btn btn-secondary">← 이전</button>
+                            <button id="confirmSelection" class="btn btn-success" disabled>선택 완료 →</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" id="step3Card" style="display:none;">
+                    <div class="card-header">
+                        <h2>3️⃣ 시나리오 확인</h2>
+                    </div>
+                    <div class="card-body">
+                        <textarea id="scenarioPreview" class="scenario-preview"></textarea>
+                        <div class="btn-group">
+                            <button id="backToStep2" class="btn btn-secondary">← 이전</button>
+                            <button id="generatePreview" class="btn btn-primary">
+                                <span id="generatePreviewText">🔍 데이터 미리보기</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EXISTING MODE: Select Card -->
+            <div id="existingMode" style="display:none;">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📇 기존 명함 선택</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="existing-cards-grid" id="existingCardsGrid">
+                            <p style="color: var(--text-muted);">명함 불러오는 중...</p>
+                        </div>
+                        <button id="generateForCard" class="btn btn-primary" style="width:100%; margin-top:1rem;"
+                            disabled>
+                            <span id="generateForCardText">🔍 선택한 명함 데이터 생성</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview (Common) -->
+            <div class="card" id="previewCard" style="display:none;">
+                <div class="card-header">
+                    <h2>4️⃣ 생성 데이터 미리보기</h2>
+                </div>
+                <div class="card-body">
+                    <div class="preview-cards-container" id="previewContainer"></div>
+                    <div class="btn-group">
+                        <button id="backToInput" class="btn btn-secondary">← 이전</button>
+                        <button id="confirmSave" class="btn btn-success">
+                            <span id="confirmSaveText">💾 DB 저장 및 파이프라인 실행</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Running (Common) -->
+            <div class="card" id="runningCard" style="display:none;">
+                <div class="card-header">
+                    <h2>5️⃣ 파이프라인 실행</h2>
+                </div>
+                <div class="card-body">
+                    <div class="status-panel">
+                        <div class="status-item">
+                            <div class="status-dot pending" id="dot-save"></div><span class="status-label">DB
+                                저장</span><span class="status-count" id="count-save">-</span>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-dot pending" id="dot-source"></div><span
+                                class="status-label">source_event 생성</span><span class="status-count"
+                                id="count-source">-</span>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-dot pending" id="dot-extract"></div><span class="status-label">fact
+                                추출</span><span class="status-count" id="count-extract">-</span>
+                        </div>
+                    </div>
+                    <div class="log-output" id="logOutput"></div>
+                    <div class="results-grid" id="resultsGrid" style="display:none;">
+                        <div class="result-box">
+                            <div class="result-box-value" id="r-cards">0</div>
+                            <div class="result-box-label">명함</div>
+                        </div>
+                        <div class="result-box">
+                            <div class="result-box-value" id="r-memos">0</div>
+                            <div class="result-box-label">메모</div>
+                        </div>
+                        <div class="result-box">
+                            <div class="result-box-value" id="r-events">0</div>
+                            <div class="result-box-label">일정</div>
+                        </div>
+                        <div class="result-box">
+                            <div class="result-box-value" id="r-sources">0</div>
+                            <div class="result-box-label">Source</div>
+                        </div>
+                        <div class="result-box">
+                            <div class="result-box-value" id="r-facts">0</div>
+                            <div class="result-box-label">Facts</div>
+                        </div>
+                    </div>
+                    <div class="btn-group" id="finishGroup" style="display:none;">
+                        <button id="resetBtn" class="btn btn-primary">🔄 새로 시작</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Analysis -->
+        <div id="tab-analysis" class="tab-content">
+            <div class="grid-2">
+                <div>
+                    <div id="warningsContainer" class="warning-box">✓ 데이터 분석 대기중</div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>📝 메모 분포</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container"><canvas id="memoLengthChart"></canvas></div>
+                            <h4 style="font-size:0.8rem; color:var(--text-secondary); margin:1rem 0 0.5rem;">중복률</h4>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="memoDupProgress" style="width:0%"></div>
+                            </div>
+                            <p style="font-size:0.75rem; color:var(--text-muted);"><span id="memoDupRate">0</span>%</p>
+                            <h4 style="font-size:0.8rem; color:var(--text-secondary); margin:1rem 0 0.5rem;">상위 키워드</h4>
+                            <div class="word-list" id="memoKeywords"></div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>📥 Source Event</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container"><canvas id="sourceTypeChart"></canvas></div>
+                            <table class="stats-table">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>처리</th>
+                                        <th>대기</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sourceStatsBody">
+                                    <tr>
+                                        <td colspan="3" style="text-align:center; color:var(--text-muted);">-</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>📤 Extracted Fact</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container"><canvas id="factTypeChart"></canvas></div>
+                            <h4 style="font-size:0.8rem; color:var(--text-secondary); margin:1rem 0 0.5rem;">상위 fact_key
+                            </h4>
+                            <div class="word-list" id="factKeywords"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = '/api/scenario';
+        let mode = 'new';
+        let selectedDomain = '비즈니스';
+        let scenarioOptions = [];
+        let selectedOptionIdx = new Set();
+        let previewData = null;
+        let selectedCard = null;
+        let existingCards = [];
+
+        // Tab
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+            });
+        });
+
+        // Mode toggle
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                mode = btn.dataset.mode;
+                document.getElementById('newMode').style.display = mode === 'new' ? 'block' : 'none';
+                document.getElementById('existingMode').style.display = mode === 'existing' ? 'block' : 'none';
+                document.getElementById('previewCard').style.display = 'none';
+                document.getElementById('runningCard').style.display = 'none';
+                if (mode === 'existing') loadExistingCards();
+            });
+        });
+
+        // Domain
+        document.querySelectorAll('.domain-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.domain-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                selectedDomain = btn.dataset.domain;
+            });
+        });
+
+        // Load existing cards
+        async function loadExistingCards() {
+            try {
+                const res = await fetch('/api/cards');
+                const data = await res.json();
+                existingCards = data.cards || [];
+                renderExistingCards();
+            } catch (e) {
+                document.getElementById('existingCardsGrid').innerHTML = '<p style="color:var(--accent-red);">불러오기 실패</p>';
+            }
+        }
+
+        function renderExistingCards() {
+            const grid = document.getElementById('existingCardsGrid');
+            if (existingCards.length === 0) {
+                grid.innerHTML = '<p style="color:var(--text-muted);">등록된 명함이 없습니다.</p>';
+                return;
+            }
+            grid.innerHTML = existingCards.map((c, i) => `
+        <div class="existing-card" data-index="${i}">
+          <div class="existing-card-name">${c.name}</div>
+          <div class="existing-card-info">${c.position || ''} ${c.company ? '@ ' + c.company : ''}</div>
+          <div class="existing-card-stats">
+            <span class="existing-card-stat">메모 ${c.memoCount || 0}</span>
+            <span class="existing-card-stat">선물 ${c.giftCount || 0}</span>
+          </div>
+        </div>
+      `).join('');
+
+            document.querySelectorAll('.existing-card').forEach(el => {
+                el.addEventListener('click', () => {
+                    document.querySelectorAll('.existing-card').forEach(e => e.classList.remove('selected'));
+                    el.classList.add('selected');
+                    selectedCard = existingCards[el.dataset.index];
+                    document.getElementById('generateForCard').disabled = false;
+                });
+            });
+        }
+
+        // Generate for existing card
+        document.getElementById('generateForCard').addEventListener('click', async () => {
+            if (!selectedCard) return;
+            const btn = document.getElementById('generateForCard');
+            const txt = document.getElementById('generateForCardText');
+            btn.disabled = true;
+            txt.innerHTML = '<div class="spinner"></div> 생성 중...';
+            try {
+                const res = await fetch(`${API}/preview-for-card`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cardId: selectedCard.id, card: selectedCard })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                previewData = { mode: 'existing', cardId: selectedCard.id, rawData: data.data };
+                renderPreviewForCard(selectedCard, data.data);
+                document.getElementById('previewCard').style.display = 'block';
+            } catch (e) {
+                alert('오류: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                txt.innerHTML = '🔍 선택한 명함 데이터 생성';
+            }
+        });
+
+        function renderPreviewForCard(card, data) {
+            document.getElementById('previewContainer').innerHTML = `
+        <div class="preview-card">
+          <div class="preview-card-header">
+            <div class="preview-card-avatar">${(card.name || '?')[0]}</div>
+            <div class="preview-card-info"><h3>${card.name}</h3><p>${card.position || ''} @ ${card.company || ''}</p></div>
+          </div>
+          <div class="preview-card-body">
+            ${renderSection('📝 메모', data.memos, m => `<div class="preview-item"><div class="preview-item-title">${(m.content || '').substring(0, 60)}...</div></div>`)}
+            ${renderSection('📅 일정', data.events, e => `<div class="preview-item"><div class="preview-item-title">${e.title}</div><div class="preview-item-meta">${e.category} | ${(e.startDate || '').split('T')[0]}</div></div>`)}
+            ${renderSection('🎁 선물', data.gifts, g => `<div class="preview-item"><div class="preview-item-title">${g.giftName}</div><div class="preview-item-meta">${g.occasion} | ${(g.price || 0).toLocaleString()}원</div></div>`)}
+            ${renderSection('💬 채팅', data.chats, c => `<div class="preview-item"><div class="preview-item-title">${c.title}</div></div>`)}
+          </div>
+        </div>
+      `;
+        }
+
+        // New mode flow
+        document.getElementById('generateOptionsBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('generateOptionsBtn');
+            const txt = document.getElementById('generateOptionsBtnText');
+            btn.disabled = true;
+            txt.innerHTML = '<div class="spinner"></div> 생성 중...';
+            try {
+                const res = await fetch(`${API}/suggest`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ domain: selectedDomain })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                scenarioOptions = data.options;
+                selectedOptionIdx.clear();
+                renderScenarioOptions();
+                document.getElementById('step1Card').style.display = 'none';
+                document.getElementById('step2Card').style.display = 'block';
+            } catch (e) {
+                alert('오류: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                txt.innerHTML = '🎲 시나리오 옵션 생성';
+            }
+        });
+
+        function renderScenarioOptions() {
+            document.getElementById('scenarioOptions').innerHTML = scenarioOptions.map((opt, i) => `
+        <div class="scenario-option" data-index="${i}">
+          <div class="scenario-option-title">${opt.title}</div>
+          <div class="scenario-option-desc">${opt.description || ''}</div>
+          <div class="contact-tags">${(opt.contacts || []).map(c => `<span class="contact-tag">${c.name}</span>`).join('')}</div>
+        </div>
+      `).join('');
+
+            document.querySelectorAll('.scenario-option').forEach(el => {
+                el.addEventListener('click', () => {
+                    const idx = parseInt(el.dataset.index);
+                    if (selectedOptionIdx.has(idx)) { selectedOptionIdx.delete(idx); el.classList.remove('selected'); }
+                    else { selectedOptionIdx.add(idx); el.classList.add('selected'); }
+                    document.getElementById('confirmSelection').disabled = selectedOptionIdx.size === 0;
+                });
+            });
+        }
+
+        document.getElementById('backToStep1').addEventListener('click', () => {
+            document.getElementById('step1Card').style.display = 'block';
+            document.getElementById('step2Card').style.display = 'none';
+        });
+
+        document.getElementById('confirmSelection').addEventListener('click', () => {
+            const selected = Array.from(selectedOptionIdx).map(i => scenarioOptions[i]);
+            let text = '';
+            selected.forEach((opt, idx) => {
+                if (idx > 0) text += '\n---\n\n';
+                text += `[${opt.title}]\n\n`;
+                (opt.contacts || []).forEach((c, i) => {
+                    text += `${i + 1}. ${c.name} (${c.position}, ${c.company}) - ${c.gender || ''}\n`;
+                    (c.traits || []).forEach(t => text += `   - ${t}\n`);
+                    if (c.interactions?.length) text += `   - 만남: ${c.interactions.join(', ')}\n`;
+                    if (c.gifts?.length) text += `   - 선물: ${c.gifts.join(', ')}\n`;
+                    text += '\n';
+                });
+            });
+            document.getElementById('scenarioPreview').value = text.trim();
+            document.getElementById('step2Card').style.display = 'none';
+            document.getElementById('step3Card').style.display = 'block';
+        });
+
+        document.getElementById('backToStep2').addEventListener('click', () => {
+            document.getElementById('step2Card').style.display = 'block';
+            document.getElementById('step3Card').style.display = 'none';
+        });
+
+        document.getElementById('generatePreview').addEventListener('click', async () => {
+            const scenario = document.getElementById('scenarioPreview').value.trim();
+            if (!scenario) return alert('시나리오를 입력하세요');
+            const btn = document.getElementById('generatePreview');
+            const txt = document.getElementById('generatePreviewText');
+            btn.disabled = true;
+            txt.innerHTML = '<div class="spinner"></div> 생성 중...';
+            try {
+                const res = await fetch(`${API}/preview`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scenario })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                previewData = { mode: 'new', rawData: data.rawData, groupedByCard: data.groupedByCard };
+                renderPreviewCards(data.groupedByCard);
+                document.getElementById('step3Card').style.display = 'none';
+                document.getElementById('previewCard').style.display = 'block';
+            } catch (e) {
+                alert('오류: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                txt.innerHTML = '🔍 데이터 미리보기';
+            }
+        });
+
+        function renderPreviewCards(grouped) {
+            document.getElementById('previewContainer').innerHTML = Object.entries(grouped).map(([cardId, data]) => {
+                const card = data.card;
+                return `
+          <div class="preview-card">
+            <div class="preview-card-header">
+              <div class="preview-card-avatar">${(card.name || '?')[0]}</div>
+              <div class="preview-card-info"><h3>${card.name}</h3><p>${card.position || ''} @ ${card.company || ''}</p></div>
+            </div>
+            <div class="preview-card-body">
+              ${renderSection('📝 메모', data.memos, m => `<div class="preview-item"><div class="preview-item-title">${(m.content || '').substring(0, 60)}...</div></div>`)}
+              ${renderSection('📅 일정', data.events, e => `<div class="preview-item"><div class="preview-item-title">${e.title}</div><div class="preview-item-meta">${e.category} | ${(e.startDate || '').split('T')[0]}</div></div>`)}
+              ${renderSection('🎁 선물', data.gifts, g => `<div class="preview-item"><div class="preview-item-title">${g.giftName}</div><div class="preview-item-meta">${g.occasion} | ${(g.price || 0).toLocaleString()}원</div></div>`)}
+              ${renderSection('💬 채팅', data.chats, c => `<div class="preview-item"><div class="preview-item-title">${c.title}</div></div>`)}
+            </div>
+          </div>
+        `;
+            }).join('');
+        }
+
+        function renderSection(title, items, renderItem) {
+            if (!items || items.length === 0) return '';
+            return `<div class="preview-section"><div class="preview-section-title">${title} <span class="preview-section-count">${items.length}</span></div>${items.map(renderItem).join('')}</div>`;
+        }
+
+        document.getElementById('backToInput').addEventListener('click', () => {
+            document.getElementById('previewCard').style.display = 'none';
+            if (mode === 'new') document.getElementById('step3Card').style.display = 'block';
+        });
+
+        // Confirm save
+        document.getElementById('confirmSave').addEventListener('click', async () => {
+            if (!previewData) return;
+            const btn = document.getElementById('confirmSave');
+            const txt = document.getElementById('confirmSaveText');
+            btn.disabled = true;
+            txt.innerHTML = '<div class="spinner"></div> 저장 중...';
+            document.getElementById('previewCard').style.display = 'none';
+            document.getElementById('runningCard').style.display = 'block';
+            clearLogs();
+            resetStatus();
+
+            try {
+                let saveRes, saveData, userId, cardIds, createdAfter;
+
+                if (previewData.mode === 'existing') {
+                    // Existing card - cardId는 이미 알고 있음
+                    setStatus('save', 'running');
+                    addLog('DB 저장 중 (기존 명함)...', 'info');
+                    saveRes = await fetch(`${API}/confirm-for-card`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ cardId: previewData.cardId, data: previewData.rawData })
+                    });
+                    saveData = await saveRes.json();
+                    if (!saveRes.ok) throw new Error(saveData.error);
+                    userId = saveData.userId;
+                    createdAfter = saveData.createdAfter;  // 새로 생성된 데이터만 처리
+                    // 기존 명함의 cardId를 배열로
+                    cardIds = [previewData.cardId];
+                    setStatus('save', 'success', `${saveData.summary.memos}메모`);
+                    addLog(`✓ 저장 완료: 메모 ${saveData.summary.memos}, 일정 ${saveData.summary.events}, 선물 ${saveData.summary.gifts}, 채팅 ${saveData.summary.chats}`, 'success');
+                    addLog(`대상 명함 ID: [${cardIds.join(', ')}]`, 'info');
+                    document.getElementById('r-cards').textContent = 1;
+                    document.getElementById('r-memos').textContent = saveData.summary.memos;
+                    document.getElementById('r-events').textContent = saveData.summary.events;
+                } else {
+                    // New scenario
+                    setStatus('save', 'running');
+                    addLog('DB 저장 중...', 'info');
+                    saveRes = await fetch(`${API}/confirm`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ rawData: previewData.rawData })
+                    });
+                    saveData = await saveRes.json();
+                    if (!saveRes.ok) throw new Error(saveData.error);
+                    userId = saveData.userId;
+                    createdAfter = saveData.createdAfter;  // 새로 생성된 데이터만 처리
+                    // 새로 생성된 명함 IDs 추출
+                    cardIds = Object.values(saveData.cardIdMap || {});
+                    setStatus('save', 'success', `${saveData.summary.cards}카드`);
+                    addLog(`✓ 저장 완료: 명함 ${saveData.summary.cards}, 메모 ${saveData.summary.memos}`, 'success');
+                    addLog(`새로 생성된 명함 IDs: [${cardIds.join(', ')}]`, 'info');
+                    document.getElementById('r-cards').textContent = saveData.summary.cards;
+                    document.getElementById('r-memos').textContent = saveData.summary.memos;
+                    document.getElementById('r-events').textContent = saveData.summary.events;
+                }
+
+                // Source events (선택한 명함에 대해서만 + 새로 생성된 데이터만!)
+                setStatus('source', 'running');
+                addLog(`source_event 생성 중 (대상 명함: [${cardIds.join(', ')}], 새 데이터만)...`, 'info');
+                const srcRes = await fetch(`${API}/populate-source`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, cardIds, createdAfter })
+                });
+                const srcData = await srcRes.json();
+                if (!srcRes.ok) throw new Error(srcData.error);
+                const total = Object.values(srcData.results).reduce((a, b) => a + b, 0);
+                setStatus('source', 'success', `${total}개`);
+                addLog(`✓ source_event 생성 완료: ${total}개 (대상 명함만)`, 'success');
+                document.getElementById('r-sources').textContent = total;
+
+                // Facts (선택한 명함에 대해서만!)
+                setStatus('extract', 'running');
+                addLog(`fact 추출 중 (대상 명함: [${cardIds.join(', ')}])...`, 'info');
+                const extRes = await fetch(`${API}/extract-facts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, cardIds })
+                });
+                const extData = await extRes.json();
+                if (!extRes.ok) throw new Error(extData.error);
+                setStatus('extract', 'success', `${extData.totalSaved}개`);
+                addLog(`✓ fact 추출 완료: ${extData.totalSaved}개 (대상 명함만)`, 'success');
+                document.getElementById('r-facts').textContent = extData.totalSaved;
+
+                document.getElementById('resultsGrid').style.display = 'grid';
+                document.getElementById('finishGroup').style.display = 'flex';
+                addLog('🎉 완료!', 'success');
+
+                const anaRes = await fetch(`${API}/analyze`);
+                if (anaRes.ok) updateCharts(await anaRes.json());
+            } catch (e) {
+                addLog(`❌ 오류: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                txt.innerHTML = '💾 DB 저장 및 파이프라인 실행';
+            }
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            previewData = null;
+            selectedCard = null;
+            selectedOptionIdx.clear();
+            document.getElementById('runningCard').style.display = 'none';
+            document.getElementById('resultsGrid').style.display = 'none';
+            document.getElementById('finishGroup').style.display = 'none';
+            if (mode === 'new') {
+                document.getElementById('step1Card').style.display = 'block';
+                document.getElementById('step2Card').style.display = 'none';
+                document.getElementById('step3Card').style.display = 'none';
+            } else {
+                loadExistingCards();
+                document.getElementById('generateForCard').disabled = true;
+            }
+        });
+
+        // Helpers
+        function addLog(msg, type = 'info') {
+            const t = new Date().toLocaleTimeString('ko-KR');
+            const el = document.createElement('div');
+            el.className = `log-line ${type}`;
+            el.innerHTML = `<span class="log-timestamp">[${t}]</span>${msg}`;
+            document.getElementById('logOutput').appendChild(el);
+            document.getElementById('logOutput').scrollTop = 99999;
+        }
+        function clearLogs() { document.getElementById('logOutput').innerHTML = ''; }
+        function setStatus(s, st, cnt = null) {
+            document.getElementById(`dot-${s}`).className = `status-dot ${st}`;
+            if (cnt !== null) document.getElementById(`count-${s}`).textContent = cnt;
+        }
+        function resetStatus() { ['save', 'source', 'extract'].forEach(s => setStatus(s, 'pending', '-')); }
+
+        // Charts
+        let memoLengthChart, sourceTypeChart, factTypeChart;
+        function initCharts() {
+            const o = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } };
+            memoLengthChart = new Chart(document.getElementById('memoLengthChart'), {
+                type: 'bar',
+                data: { labels: ['Min', 'P25', 'Med', 'P75', 'Max'], datasets: [{ data: [0, 0, 0, 0, 0], backgroundColor: ['#ef4444', '#f59e0b', '#6366f1', '#f59e0b', '#ef4444'] }] },
+                options: { ...o, scales: { y: { beginAtZero: true, ticks: { color: '#9090a0' } }, x: { ticks: { color: '#9090a0' } } } }
+            });
+            sourceTypeChart = new Chart(document.getElementById('sourceTypeChart'), {
+                type: 'bar',
+                data: { labels: [], datasets: [{ label: '처리', data: [], backgroundColor: '#10b981' }, { label: '대기', data: [], backgroundColor: '#f59e0b' }] },
+                options: { ...o, plugins: { legend: { display: true, labels: { color: '#9090a0' } } }, scales: { y: { beginAtZero: true }, x: {} } }
+            });
+            factTypeChart = new Chart(document.getElementById('factTypeChart'), {
+                type: 'polarArea',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: ['#6366f188', '#10b98188', '#f59e0b88', '#ef444488', '#a855f788', '#06b6d488', '#ec489988', '#9090a088'] }] },
+                options: o
+            });
+        }
+
+        function updateCharts(data) {
+            document.getElementById('warningsContainer').innerHTML = data.warnings?.length > 0
+                ? data.warnings.map(w => `⚠️ ${w}`).join('<br>')
+                : '✓ 이상 없음';
+            if (data.memo) {
+                const r = (data.memo.duplicateRate * 100).toFixed(1);
+                document.getElementById('memoDupRate').textContent = r;
+                document.getElementById('memoDupProgress').style.width = `${Math.min(r, 100)}%`;
+                document.getElementById('memoKeywords').innerHTML = (data.memo.topWords || []).slice(0, 12).map((w, i) => `<span class="word-tag ${i < 3 ? 'large' : i < 7 ? 'medium' : 'small'}">${w.word} (${w.count})</span>`).join('');
+                if (data.memo.lengthStats) {
+                    const ls = data.memo.lengthStats;
+                    memoLengthChart.data.datasets[0].data = [ls.min, ls.p25, ls.median, ls.p75, ls.max];
+                    memoLengthChart.update();
+                }
+            }
+            if (data.sourceEvent?.distribution) {
+                const d = data.sourceEvent.distribution;
+                document.getElementById('sourceStatsBody').innerHTML = Object.entries(d).map(([t, c]) => `<tr><td>${t}</td><td>${c.processed || 0}</td><td>${c.pending || 0}</td></tr>`).join('');
+                sourceTypeChart.data.labels = Object.keys(d);
+                sourceTypeChart.data.datasets[0].data = Object.keys(d).map(k => d[k].processed || 0);
+                sourceTypeChart.data.datasets[1].data = Object.keys(d).map(k => d[k].pending || 0);
+                sourceTypeChart.update();
+            }
+            if (data.fact) {
+                if (data.fact.typeDistribution) {
+                    factTypeChart.data.labels = Object.keys(data.fact.typeDistribution);
+                    factTypeChart.data.datasets[0].data = Object.values(data.fact.typeDistribution);
+                    factTypeChart.update();
+                }
+                document.getElementById('factKeywords').innerHTML = (data.fact.topKeys || []).slice(0, 12).map(([k, c], i) => `<span class="word-tag ${i < 3 ? 'large' : i < 7 ? 'medium' : 'small'}">${k} (${c})</span>`).join('');
+            }
+        }
+
+        initCharts();
+        fetch(`${API}/analyze`).then(r => r.json()).then(updateCharts).catch(() => { });
+    </script>
+</body>
+
+</html>
