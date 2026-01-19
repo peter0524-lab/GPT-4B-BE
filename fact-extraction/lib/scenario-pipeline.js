@@ -104,8 +104,17 @@ export async function generateDummyData(scenario, rawData = null) {
           cardCreationTime.toISOString(),
         ]
       );
-      cardIdMap[i] = cardResult.insertId;
-      console.log(`명함 생성: index=${i} → DB id=${cardResult.insertId} (${card.name}) at ${cardCreationTime.toISOString()}`);
+      
+      // insertId 확인 및 디버깅
+      const insertId = cardResult?.insertId;
+      if (!insertId) {
+        console.error(`❌ 명함 생성 실패: cardResult=`, cardResult);
+        throw new Error(`명함 생성 실패: insertId를 가져올 수 없습니다. (index=${i}, name=${card.name})`);
+      }
+      
+      cardIdMap[i] = insertId;
+      console.log(`명함 생성: index=${i} → DB id=${insertId} (${card.name}) at ${cardCreationTime.toISOString()}`);
+      console.log(`  cardIdMap 상태:`, cardIdMap);
     }
 
     // 3. 일정 생성 (시간 자동 할당)
@@ -240,7 +249,16 @@ export async function generateDummyData(scenario, rawData = null) {
     // 5. 채팅 생성 (선물과 연동된 시간 사용, cardId 연결)
     let chatsCount = 0;
     // 채팅에 연결할 cardId (선물과 동일한 명함)
-    const chatCardDbId = Object.values(cardIdMap)[0];
+    // cardIdMap[0]을 직접 사용하여 더 안전하게 처리
+    const chatCardDbId = cardIdMap[0] || (Object.values(cardIdMap).length > 0 ? Object.values(cardIdMap)[0] : null);
+    
+    console.log(`채팅 생성 준비: cardIdMap=`, cardIdMap, `chatCardDbId=`, chatCardDbId);
+    
+    if (!chatCardDbId) {
+      console.error('❌ chatCardDbId가 없습니다. cardIdMap:', cardIdMap);
+      console.error('  cardIdMap 타입:', typeof cardIdMap, 'keys:', Object.keys(cardIdMap));
+      throw new Error('명함이 생성되지 않아 채팅에 연결할 cardId를 찾을 수 없습니다.');
+    }
     
     if (generatedData.chats) {
       for (let chatIdx = 0; chatIdx < generatedData.chats.length; chatIdx++) {
