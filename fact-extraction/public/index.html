@@ -848,6 +848,19 @@
 
         <!-- Tab: Analysis -->
         <div id="tab-analysis" class="tab-content">
+            <div class="card" style="margin-bottom: 1rem;">
+                <div class="card-header">
+                    <h2>📊 분석 대상</h2>
+                </div>
+                <div class="card-body">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                        <span style="color: var(--text-secondary); font-size: 0.9rem;">분석 중인 명함 IDs:</span>
+                        <span id="analyzedCardIds"
+                            style="color: var(--accent-blue); font-weight: 500; font-family: 'JetBrains Mono', monospace;">전체
+                            데이터</span>
+                    </div>
+                </div>
+            </div>
             <div class="grid-2">
                 <div>
                     <div id="warningsContainer" class="warning-box">✓ 데이터 분석 대기중</div>
@@ -1326,6 +1339,16 @@
         }
 
         function updateCharts(data) {
+            // 분석 대상 cardIds 표시
+            const cardIdsElement = document.getElementById('analyzedCardIds');
+            if (data.cardIds && data.cardIds.length > 0) {
+                cardIdsElement.textContent = `[${data.cardIds.join(', ')}]`;
+                cardIdsElement.style.color = 'var(--accent-blue)';
+            } else {
+                cardIdsElement.textContent = '전체 데이터';
+                cardIdsElement.style.color = 'var(--text-secondary)';
+            }
+
             document.getElementById('warningsContainer').innerHTML = data.warnings?.length > 0
                 ? data.warnings.map(w => `⚠️ ${w}`).join('<br>')
                 : '✓ 이상 없음';
