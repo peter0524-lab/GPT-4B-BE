@@ -13,14 +13,26 @@ router.use(authenticate);
 // @access  Private
 router.get("/", async (req, res) => {
   try {
-    const { search, page = 1, limit = 20 } = req.query;
+    const { search, page = 1, limit = 20, cardIds } = req.query;
+
+    const parsedCardIds = cardIds
+      ? String(cardIds)
+          .split(",")
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0)
+      : [];
 
     const cards = await BusinessCard.findByUserId(req.user.id, {
       search,
       page,
       limit,
+      cardIds: parsedCardIds,
     });
-    const total = await BusinessCard.countByUserId(req.user.id, search);
+    const total = await BusinessCard.countByUserId(
+      req.user.id,
+      search,
+      parsedCardIds
+    );
 
     res.json({
       success: true,

@@ -3,11 +3,17 @@ import pool from "../config/database.js";
 class BusinessCard {
   // Find all cards for a user
   static async findByUserId(userId, options = {}) {
-    const { search, page = 1, limit = 20 } = options;
+    const { search, page = 1, limit = 20, cardIds = [] } = options;
     const offset = (page - 1) * limit;
 
     let query = "SELECT * FROM business_cards WHERE userId = ?";
     const params = [userId];
+
+    if (Array.isArray(cardIds) && cardIds.length > 0) {
+      const placeholders = cardIds.map(() => "?").join(", ");
+      query += ` AND id IN (${placeholders})`;
+      params.push(...cardIds);
+    }
 
     if (search) {
       query += " AND (name LIKE ? OR company LIKE ? OR position LIKE ?)";
@@ -23,9 +29,15 @@ class BusinessCard {
   }
 
   // Count cards for a user
-  static async countByUserId(userId, search = null) {
+  static async countByUserId(userId, search = null, cardIds = []) {
     let query = "SELECT COUNT(*) as total FROM business_cards WHERE userId = ?";
     const params = [userId];
+
+    if (Array.isArray(cardIds) && cardIds.length > 0) {
+      const placeholders = cardIds.map(() => "?").join(", ");
+      query += ` AND id IN (${placeholders})`;
+      params.push(...cardIds);
+    }
 
     if (search) {
       query += " AND (name LIKE ? OR company LIKE ? OR position LIKE ?)";
