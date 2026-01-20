@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>관계 그래프 분석</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    :root {
+      --bg-light: #f5f5f5;
+      --bg-card: #ffffff;
+      --text-primary: #1f2937;
+      --text-secondary: #6b7280;
+      --accent-primary: #584cdc;
+      --accent-primary-light: #7c6fef;
+      --accent-green: #22c55e;
+      --accent-yellow: #eab308;
+      --accent-red: #ef4444;
+      --accent-purple: #a855f7;
+      --border-color: #e5e7eb;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Noto Sans KR', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background: var(--bg-light);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 430px;
+      margin: 0 auto;
+      padding: 16px;
+      background: white;
+      min-height: 100vh;
+    }
+
+    @media (min-width: 431px) {
+      body {
+        padding: 20px 0;
+      }
+
+      .container {
+        border-radius: 24px;
+        min-height: auto;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+      }
+    }
+
+    header {
+      text-align: center;
+      padding: 20px 0 16px;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 16px;
+    }
+
+    header h1 {
+      font-size: 1.25rem;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-primary-light));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    header p {
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+    }
+
+    .grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      padding: 14px;
+    }
+
+    .card-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-primary);
+    }
+
+    .full-width {
+      width: 100%;
+    }
+
+    /* 그래프 영역 */
+    #graph-container {
+      height: 350px;
+      background: linear-gradient(135deg, #f8f7ff 0%, #ede9fe 100%);
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+
+    #graph-container svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 🎨 동적 노드 스타일 */
+    .node {
+      cursor: pointer;
+    }
+
+    .node:hover .node-circle {
+      filter: brightness(1.2) url(#glow);
+    }
+
+    .node text {
+      font-size: 11px;
+      font-weight: 600;
+      fill: var(--text-primary);
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(255, 255, 255, 0.8);
+    }
+
+    .node-circle {
+      transition: filter 0.2s ease;
+    }
+
+    /* 펄스 애니메이션 */
+    @keyframes pulse {
+
+      0%,
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+
+      50% {
+        transform: scale(1.15);
+        opacity: 0.7;
+      }
+    }
+
+    @keyframes glow {
+
+      0%,
+      100% {
+        filter: drop-shadow(0 0 3px currentColor);
+      }
+
+      50% {
+        filter: drop-shadow(0 0 12px currentColor);
+      }
+    }
+
+    @keyframes rotate-ring {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .pulse-ring {
+      animation: pulse 2s ease-in-out infinite;
+      opacity: 0.3;
+    }
+
+    .glow-effect {
+      animation: glow 2s ease-in-out infinite;
+    }
+
+    /* 엣지 스타일 */
+    .link {
+      fill: none;
+      stroke-opacity: 0.5;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .link:hover {
+      stroke-opacity: 1;
+      stroke-width: 4px !important;
+      filter: drop-shadow(0 0 4px currentColor);
+    }
+
+    .link-selected {
+      stroke-opacity: 1;
+      stroke-width: 5px !important;
+      filter: drop-shadow(0 0 8px currentColor);
+      animation: glow 1s ease-in-out infinite;
+    }
+
+    /* 관계 설명 패널 */
+    .relation-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      left: 0;
+      width: 100%;
+      max-width: 430px;
+      margin: 0 auto;
+      height: 100vh;
+      background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%);
+      border-left: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+      padding: 20px 16px;
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 1000;
+      overflow-y: auto;
+      box-shadow: 0 0 32px rgba(0, 0, 0, 0.15);
+      transform: translateX(100%);
+    }
+
+    .relation-panel.open {
+      transform: translateX(0);
+    }
+
+    .relation-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .relation-panel-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-primary-light));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 5px;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .close-btn:hover {
+      background: rgba(88, 76, 220, 0.1);
+      color: var(--accent-primary);
+    }
+
+    .relation-score {
+      text-align: center;
+      padding: 20px;
+      background: linear-gradient(135deg, rgba(88, 76, 220, 0.08), rgba(124, 111, 239, 0.08));
+      border-radius: 14px;
+      margin-bottom: 16px;
+      border: 1px solid rgba(88, 76, 220, 0.15);
+    }
+
+    .relation-score-value {
+      font-size: 4rem;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+
+    .relation-score-label {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .relation-section {
+      margin-bottom: 18px;
+    }
+
+    .relation-section-title {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+
+    .relation-content {
+      background: #f9fafb;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      line-height: 1.6;
+      color: var(--text-primary);
+      font-size: 0.9rem;
+    }
+
+    .relation-tag {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+
+    .relation-strengths {
+      list-style: none;
+    }
+
+    .relation-strengths li {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+    }
+
+    .relation-strengths li:last-child {
+      border-bottom: none;
+    }
+
+    .relation-strengths li::before {
+      content: '✓';
+      color: var(--accent-green);
+      font-weight: bold;
+    }
+
+    /* 툴팁 */
+    .tooltip {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px;
+      pointer-events: none;
+      z-index: 100;
+      min-width: 220px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+
+    .tooltip h4 {
+      margin-bottom: 6px;
+      color: var(--accent-primary);
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .tooltip p {
+      font-size: 0.85rem;
+      margin: 4px 0;
+      color: var(--text-secondary);
+    }
+
+    .tooltip .score {
+      font-size: 1.8rem;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+
+    /* 통계 카드 */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .stat-item {
+      text-align: center;
+      padding: 12px 8px;
+      background: linear-gradient(135deg, rgba(88, 76, 220, 0.06), rgba(124, 111, 239, 0.06));
+      border-radius: 10px;
+      border: 1px solid rgba(88, 76, 220, 0.1);
+    }
+
+    .stat-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent-primary);
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+      font-weight: 500;
+    }
+
+    /* 피처 리스트 */
+    .feature-list {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .feature-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.8rem;
+    }
+
+    .feature-item:last-child {
+      border-bottom: none;
+    }
+
+    .feature-name {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .feature-value {
+      color: var(--text-secondary);
+    }
+
+    .feature-excluded {
+      color: var(--accent-red);
+      font-size: 0.75rem;
+    }
+
+    /* 점수 테이블 */
+    .score-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+
+    .score-table th,
+    .score-table td {
+      padding: 10px 6px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .score-table th {
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+    }
+
+    .score-table tbody tr:hover {
+      background: rgba(88, 76, 220, 0.04);
+    }
+
+    .grade-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 0.7rem;
+    }
+
+    /* 품질 피드백 */
+    .quality-feedback {
+      padding: 16px;
+      border-radius: 12px;
+      margin-top: 12px;
+    }
+
+    .quality-good {
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .quality-fair {
+      background: rgba(234, 179, 8, 0.08);
+      border: 1px solid rgba(234, 179, 8, 0.3);
+    }
+
+    .quality-poor {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .quality-feedback h4 {
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .quality-feedback ul {
+      margin-left: 20px;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    /* 로딩 */
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 180px;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    .loading::after {
+      content: '';
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--border-color);
+      border-top-color: var(--accent-primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-left: 10px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* 버튼 */
+    .btn {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.8rem;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--accent-primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-primary-light);
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    /* 힌트 */
+    .graph-hint {
+      position: absolute;
+      bottom: 15px;
+      left: 15px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px 15px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <h1>🔗 관계 그래프 분석</h1>
+      <p>명함 데이터 기반 관계 강도 시각화</p>
+    </header>
+
+    <!-- 요약 통계 -->
+    <div class="card full-width" style="margin-bottom: 20px;">
+      <div class="card-title">📊 요약 통계</div>
+      <div class="stats-grid" id="stats-grid">
+        <div class="loading">로딩 중</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- 그래프 -->
+      <div class="card full-width">
+        <div class="card-title">
+          🕸️ 관계 네트워크
+          <div class="controls" style="margin-left: auto;">
+            <button class="btn btn-primary" onclick="refreshData()">새로고침</button>
+            <button class="btn btn-primary" onclick="exportGraph()">내보내기</button>
+          </div>
+        </div>
+        <div id="graph-container">
+          <div class="graph-hint">💡 엣지(선)를 클릭하면 관계 상세 정보를 볼 수 있어요</div>
+        </div>
+        <div class="tooltip" id="tooltip" style="display: none;"></div>
+      </div>
+
+      <!-- 유의미 피처 -->
+      <div class="card">
+        <div class="card-title">✅ 사용된 피처</div>
+        <div class="feature-list" id="significant-features">
+          <div class="loading">로딩 중</div>
+        </div>
+      </div>
+
+      <!-- 관계 유형 분포 -->
+      <div class="card">
+        <div class="card-title">🏷️ 관계 유형 분포</div>
+        <div class="feature-list" id="relationship-types">
+          <div class="loading">로딩 중</div>
+        </div>
+      </div>
+
+      <!-- 품질 피드백 -->
+      <div class="card">
+        <div class="card-title">🎯 품질 평가</div>
+        <div id="quality-feedback">
+          <div class="loading">로딩 중</div>
+        </div>
+      </div>
+
+      <!-- 점수 테이블 -->
+      <div class="card full-width">
+        <div class="card-title">🏆 관계 점수 순위</div>
+        <div style="max-height: 400px; overflow-y: auto;">
+          <table class="score-table">
+            <thead>
+              <tr>
+                <th>순위</th>
+                <th>이름</th>
+                <th>회사</th>
+                <th>점수</th>
+                <th>등급</th>
+              </tr>
+            </thead>
+            <tbody id="score-table-body">
+              <tr>
+                <td colspan="5" class="loading">로딩 중</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 관계 설명 패널 -->
+  <div class="relation-panel" id="relation-panel">
+    <div class="relation-panel-header">
+      <div class="relation-panel-title">관계 상세</div>
+      <button class="close-btn" onclick="closeRelationPanel()">×</button>
+    </div>
+    <div id="relation-panel-content">
+      <!-- 동적으로 채워짐 -->
+    </div>
+  </div>
+
+  <script>
+    let graphData = null;
+    let simulation = null;
+    let selectedEdge = null;
+
+    // 데이터 로드 (자동 피드백 루프 사용)
+    async function loadData() {
+      try {
+        const response = await fetch('/api/llm-auto?limit=20&maxIterations=2');
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.error);
+        }
+
+        const data = result.data;
+
+        updateStatsLLM(data);
+        updateFeatureListLLM(data.usedFeatures);
+        updateQualityFeedbackWithLoop(data);
+        updateRelationshipTypes(data.summary.typeDistribution);
+
+        // Top-K 필터링 (k = 10)
+        const K = 10;
+        const nonUserNodes = data.graph.nodes.filter(n => n.type !== 'user');
+        const userNode = data.graph.nodes.find(n => n.type === 'user');
+
+        // 점수 순 정렬 후 상위 K개만
+        const topKNodes = [...nonUserNodes]
+          .sort((a, b) => (b.score || 0) - (a.score || 0))
+          .slice(0, K);
+
+        const filteredNodes = userNode ? [userNode, ...topKNodes] : topKNodes;
+        const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
+        const filteredEdges = data.graph.edges.filter(e =>
+          filteredNodeIds.has(e.target) || filteredNodeIds.has(e.target?.id)
+        );
+
+        const filteredGraph = {
+          nodes: filteredNodes,
+          edges: filteredEdges,
+          metadata: data.graph.metadata
+        };
+
+        // 테이블은 전체 보여주기
+        updateScoreTableLLM(nonUserNodes);
+
+        graphData = filteredGraph;
+        renderGraph(filteredGraph);
+
+      } catch (error) {
+        console.error('데이터 로드 오류:', error);
+        alert('데이터를 불러오는데 실패했습니다. LLM API 연결을 확인하세요.');
+      }
+    }
+
+    // 통계 업데이트
+    function updateStatsLLM(data) {
+      const summary = data.summary;
+      document.getElementById('stats-grid').innerHTML = `
+        <div class="stat-item">
+          <div class="stat-value">${summary.totalAnalyzed}</div>
+          <div class="stat-label">분석된 명함</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${summary.avgScore}</div>
+          <div class="stat-label">평균 점수</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${summary.maxScore}</div>
+          <div class="stat-label">최고 점수</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${data.graph.edges.length}</div>
+          <div class="stat-label">연결 수</div>
+        </div>
+      `;
+    }
+
+    // 피처 리스트 업데이트
+    function updateFeatureListLLM(features) {
+      const container = document.getElementById('significant-features');
+      container.innerHTML = features.map(f => `
+        <div class="feature-item">
+          <span class="feature-name">${f}</span>
+          <span class="feature-value" style="color: var(--accent-green);">✓</span>
+        </div>
+      `).join('');
+    }
+
+    // 관계 유형 분포
+    function updateRelationshipTypes(typeDistribution) {
+      const container = document.getElementById('relationship-types');
+      if (!typeDistribution) {
+        container.innerHTML = '<p style="color: var(--text-secondary);">분포 데이터 없음</p>';
+        return;
+      }
+
+      const typeColors = {
+        '비즈니스': '#584cdc',
+        '개인적': '#22c55e',
+        '잠재적': '#eab308',
+        '소원': '#f97316',
+        '혼합': '#a855f7'
+      };
+
+      container.innerHTML = Object.entries(typeDistribution)
+        .sort((a, b) => b[1] - a[1])
+        .map(([type, count]) => `
+          <div class="feature-item">
+            <span class="feature-name" style="color: ${typeColors[type] || '#888'}">${type}</span>
+            <span class="feature-value">${count}명</span>
+          </div>
+        `).join('');
+    }
+
+    // 품질 피드백
+    function updateQualityFeedbackWithLoop(data) {
+      const container = document.getElementById('quality-feedback');
+      const summary = data.summary;
+      const loop = data.feedbackLoop;
+      const quality = data.quality;
+
+      if (!summary || !summary.topRelationships) {
+        container.innerHTML = '<p>분석 결과가 없습니다.</p>';
+        return;
+      }
+
+      const topList = summary.topRelationships.map(r =>
+        `<li><strong>${r.name}</strong> (${r.score}점): ${r.summary}</li>`
+      ).join('');
+
+      let loopInfo = '';
+      if (loop && loop.totalIterations > 1) {
+        loopInfo = `
+          <div style="background: rgba(79, 140, 255, 0.1); padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+            <strong>🔄 피드백 루프: ${loop.totalIterations}회 반복</strong>
+          </div>
+        `;
+      }
+
+      let qualityClass = 'quality-good';
+      if (quality && !quality.isGood) {
+        qualityClass = quality.issues.some(i => i.severity === 'high') ? 'quality-poor' : 'quality-fair';
+      }
+
+      container.innerHTML = `
+        <div class="quality-feedback ${qualityClass}">
+          ${loopInfo}
+          <h4>🤖 LLM 분석 완료</h4>
+          <p style="margin: 10px 0;">총 ${summary.totalAnalyzed}명, 평균 ${summary.avgScore}점</p>
+          <p><strong>Top 관계:</strong></p>
+          <ul style="margin-left: 20px; font-size: 0.9rem;">${topList}</ul>
+        </div>
+      `;
+    }
+
+    // 점수 테이블 (전체)
+    function updateScoreTableLLM(nodes) {
+      const tbody = document.getElementById('score-table-body');
+      const sorted = [...nodes].sort((a, b) => (b.score || 0) - (a.score || 0));
+
+      if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">표시할 관계가 없습니다.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = sorted.map((n, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${n.label || '-'}</td>
+          <td>${n.company || '-'}</td>
+          <td><strong>${n.score || 0}</strong></td>
+          <td>
+            <span class="grade-badge" style="background: ${n.grade?.color || '#888'}20; color: ${n.grade?.color || '#888'}">
+              ${n.grade?.level || '?'} - ${n.grade?.label || '알 수 없음'}
+            </span>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // 🎨 그래프 렌더링 (동적 디자인)
+    function renderGraph(data) {
+      const container = document.getElementById('graph-container');
+      const hint = container.querySelector('.graph-hint');
+      container.innerHTML = '';
+      if (hint) container.appendChild(hint);
+
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      const svg = d3.select('#graph-container')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height);
+
+      // 그라데이션 정의
+      const defs = svg.append('defs');
+
+      // 각 등급별 그라데이션
+      const gradeColors = {
+        'A': ['#22c55e', '#16a34a'],
+        'B': ['#84cc16', '#65a30d'],
+        'C': ['#eab308', '#ca8a04'],
+        'D': ['#f97316', '#ea580c'],
+        'F': ['#ef4444', '#dc2626'],
+        'user': ['#7c6fef', '#584cdc']
+      };
+
+      Object.entries(gradeColors).forEach(([grade, colors]) => {
+        const gradient = defs.append('radialGradient')
+          .attr('id', `gradient-${grade}`)
+          .attr('cx', '30%')
+          .attr('cy', '30%');
+
+        gradient.append('stop')
+          .attr('offset', '0%')
+          .attr('stop-color', colors[0])
+          .attr('stop-opacity', 1);
+
+        gradient.append('stop')
+          .attr('offset', '100%')
+          .attr('stop-color', colors[1])
+          .attr('stop-opacity', 0.8);
+      });
+
+      // 글로우 필터
+      const glowFilter = defs.append('filter')
+        .attr('id', 'glow')
+        .attr('x', '-50%')
+        .attr('y', '-50%')
+        .attr('width', '200%')
+        .attr('height', '200%');
+
+      glowFilter.append('feGaussianBlur')
+        .attr('stdDeviation', '3')
+        .attr('result', 'coloredBlur');
+
+      const feMerge = glowFilter.append('feMerge');
+      feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+      feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+      // 줌
+      const g = svg.append('g');
+      svg.call(d3.zoom()
+        .scaleExtent([0.3, 3])
+        .on('zoom', (event) => g.attr('transform', event.transform))
+      );
+
+      // 링크
+      const link = g.append('g')
+        .selectAll('line')
+        .data(data.edges)
+        .join('line')
+        .attr('class', 'link')
+        .attr('stroke', d => d.color)
+        .attr('stroke-width', d => d.width)
+        .style('cursor', 'pointer')
+        .on('click', (event, d) => {
+          event.stopPropagation();
+          showRelationDetail(d);
+        });
+
+      // 노드 그룹
+      const node = g.append('g')
+        .selectAll('g')
+        .data(data.nodes)
+        .join('g')
+        .attr('class', 'node')
+        .call(d3.drag()
+          .on('start', dragstarted)
+          .on('drag', dragged)
+          .on('end', dragended)
+        );
+
+      // 펄스 링 (배경)
+      node.filter(d => d.type !== 'user')
+        .append('circle')
+        .attr('class', 'pulse-ring')
+        .attr('r', d => d.size + 8)
+        .attr('fill', 'none')
+        .attr('stroke', d => d.color)
+        .attr('stroke-width', 2)
+        .style('animation-delay', d => `${Math.random() * 2}s`);
+
+      // 메인 원
+      node.append('circle')
+        .attr('class', 'node-circle glow-effect')
+        .attr('r', d => d.size)
+        .attr('fill', d => {
+          const grade = d.type === 'user' ? 'user' : (d.grade?.level || 'C');
+          return `url(#gradient-${grade})`;
+        })
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 2)
+        .attr('filter', 'url(#glow)')
+        .style('animation-delay', d => `${Math.random() * 2}s`);
+
+      // 내부 하이라이트
+      node.append('circle')
+        .attr('r', d => d.size * 0.4)
+        .attr('fill', 'rgba(255,255,255,0.3)')
+        .attr('transform', 'translate(-3, -3)');
+
+      // 이름 텍스트
+      node.append('text')
+        .text(d => d.label)
+        .attr('dy', d => d.size + 16)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#fff');
+
+      // 툴팁
+      const tooltip = document.getElementById('tooltip');
+
+      node.on('mouseover', (event, d) => {
+        if (d.type === 'user') return;
+
+        tooltip.style.display = 'block';
+        tooltip.style.left = (event.pageX + 15) + 'px';
+        tooltip.style.top = (event.pageY - 10) + 'px';
+
+        tooltip.innerHTML = `
+          <h4>${d.label}</h4>
+          <p>${d.company || ''}</p>
+          <div class="score" style="color: ${d.grade?.color || '#888'}">
+            ${d.score || 0}점
+          </div>
+          <p><strong>등급:</strong> ${d.grade?.level || '?'} (${d.grade?.label || '알 수 없음'})</p>
+          <p><strong>유형:</strong> ${d.relationshipType || '-'}</p>
+          ${d.summary ? `<p style="margin-top: 10px; font-size: 0.85rem; color: #aaa; border-top: 1px solid #333; padding-top: 10px;">${d.summary}</p>` : ''}
+        `;
+      })
+        .on('mouseout', () => {
+          tooltip.style.display = 'none';
+        })
+        .on('click', (event, d) => {
+          if (d.type === 'user') return;
+          // 노드 클릭시 해당 엣지 찾아서 패널 열기
+          const edge = data.edges.find(e => e.target === d.id || e.target.id === d.id);
+          if (edge) showRelationDetail(edge);
+        });
+
+      // 시뮬레이션 (빠르게 안정화되도록 설정)
+      simulation = d3.forceSimulation(data.nodes)
+        .force('link', d3.forceLink(data.edges)
+          .id(d => d.id)
+          .distance(d => d.distance || 150)
+        )
+        .force('charge', d3.forceManyBody().strength(-400))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(d => d.size + 15))
+        .alphaDecay(0.05)      // 더 빠르게 안정화 (기본값 0.0228)
+        .velocityDecay(0.4)    // 움직임 감소 (기본값 0.4)
+        .on('tick', () => {
+          link
+            .attr('x1', d => d.source.x)
+            .attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x)
+            .attr('y2', d => d.target.y);
+
+          node.attr('transform', d => `translate(${d.x},${d.y})`);
+        })
+        .on('end', () => {
+          // 시뮬레이션 완료 후 노드 위치 고정
+          data.nodes.forEach(d => {
+            d.fx = d.x;
+            d.fy = d.y;
+          });
+        });
+
+      // 배경 클릭시 패널 닫기
+      svg.on('click', () => {
+        closeRelationPanel();
+      });
+    }
+
+    // 관계 상세 패널 열기
+    function showRelationDetail(edge) {
+      const panel = document.getElementById('relation-panel');
+      const content = document.getElementById('relation-panel-content');
+
+      // 타겟 노드 정보 찾기
+      const targetNode = graphData.nodes.find(n =>
+        n.id === edge.target || n.id === edge.target.id
+      );
+
+      if (!targetNode || targetNode.type === 'user') return;
+
+      // 기존 선택 해제
+      d3.selectAll('.link').classed('link-selected', false);
+
+      // 새 선택
+      d3.selectAll('.link')
+        .filter(d => d === edge)
+        .classed('link-selected', true);
+
+      selectedEdge = edge;
+
+      const gradeColors = {
+        'A': '#22c55e', 'B': '#84cc16', 'C': '#eab308', 'D': '#f97316', 'F': '#ef4444'
+      };
+
+      const typeColors = {
+        '비즈니스': '#584cdc',
+        '개인적': '#22c55e',
+        '잠재적': '#eab308',
+        '소원': '#f97316',
+        '혼합': '#a855f7'
+      };
+
+      content.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+          <div style="font-size: 1.5rem; font-weight: 600; margin-bottom: 5px;">${targetNode.label}</div>
+          <div style="color: var(--text-secondary);">${targetNode.company || ''}</div>
+        </div>
+        
+        <div class="relation-score">
+          <div class="relation-score-value" style="color: ${targetNode.grade?.color || '#888'}">
+            ${targetNode.score || 0}
+          </div>
+          <div class="relation-score-label">관계 점수</div>
+        </div>
+        
+        <div class="relation-section">
+          <div class="relation-section-title">등급 & 유형</div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <span class="relation-tag" style="background: ${targetNode.grade?.color || '#888'}30; color: ${targetNode.grade?.color || '#888'}">
+              ${targetNode.grade?.level || '?'} - ${targetNode.grade?.label || '알 수 없음'}
+            </span>
+            <span class="relation-tag" style="background: ${typeColors[targetNode.relationshipType] || '#888'}30; color: ${typeColors[targetNode.relationshipType] || '#888'}">
+              ${targetNode.relationshipType || '-'}
+            </span>
+          </div>
+        </div>
+        
+        ${targetNode.summary ? `
+        <div class="relation-section">
+          <div class="relation-section-title">관계 요약</div>
+          <div class="relation-content">${targetNode.summary}</div>
+        </div>
+        ` : ''}
+        
+        ${targetNode.reasoning ? `
+        <div class="relation-section">
+          <div class="relation-section-title">💡 LLM 분석 근거</div>
+          <div class="relation-content" style="font-size: 0.9rem; line-height: 1.7;">
+            ${targetNode.reasoning}
+          </div>
+        </div>
+        ` : ''}
+        
+        ${targetNode.strengths && targetNode.strengths.length > 0 ? `
+        <div class="relation-section">
+          <div class="relation-section-title">관계의 강점</div>
+          <ul class="relation-strengths">
+            ${targetNode.strengths.map(s => `<li>${s}</li>`).join('')}
+          </ul>
+        </div>
+        ` : ''}
+        
+        ${targetNode.improvements && targetNode.improvements.length > 0 ? `
+        <div class="relation-section">
+          <div class="relation-section-title">개선 제안</div>
+          <ul class="relation-strengths" style="--accent-green: var(--accent-yellow);">
+            ${targetNode.improvements.map(s => `<li style="color: var(--accent-yellow);">${s}</li>`).join('')}
+          </ul>
+        </div>
+        ` : ''}
+      `;
+
+      panel.classList.add('open');
+    }
+
+    function closeRelationPanel() {
+      document.getElementById('relation-panel').classList.remove('open');
+      d3.selectAll('.link').classed('link-selected', false);
+      selectedEdge = null;
+    }
+
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.1).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      // 드래그 후 해당 위치에 고정
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+
+    function refreshData() {
+      closeRelationPanel();
+      loadData();
+    }
+
+    function exportGraph() {
+      if (!graphData) return;
+
+      const dataStr = JSON.stringify(graphData, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'relationship-graph.json';
+      a.click();
+
+      URL.revokeObjectURL(url);
+    }
+
+    // 초기 로드
+    loadData();
+  </script>
+</body>
+
+</html>
