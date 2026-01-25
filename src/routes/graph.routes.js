@@ -397,8 +397,15 @@ router.get("/llm-graph", async (req, res) => {
  * 자동 피드백 루프 실행
  * 품질이 낮으면 LLM이 피처 조작 후 재분석
  * GET /api/graph/llm-auto
+ * 
+ * 타임아웃: 10분 (600초) - LLM 분석이 오래 걸릴 수 있음
  */
-router.get("/llm-auto", async (req, res) => {
+router.get("/llm-auto", (req, res, next) => {
+  // 타임아웃을 10분(600초)으로 설정
+  req.setTimeout(600000); // 10분 = 600,000ms
+  res.setTimeout(600000);
+  next();
+}, async (req, res) => {
   try {
     const userId = parseInt(req.query.userId) || 1;
     const limit = parseInt(req.query.limit) || 20;

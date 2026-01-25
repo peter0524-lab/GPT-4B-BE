@@ -117,7 +117,7 @@ const initializeDatabase = async () => {
   await createTables();
 
   // Start server - 0.0.0.0으로 바인딩하여 외부 접속 허용
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info("Server is running", {
       port: PORT,
       environment: process.env.NODE_ENV || "development",
@@ -125,6 +125,9 @@ const initializeDatabase = async () => {
       networkAccess: `http://0.0.0.0:${PORT}`,
     });
   });
+  
+  // 서버 타임아웃 설정 (10분) - 그래프 분석 API용
+  server.timeout = 600000; // 10분 = 600,000ms
 };
 
 initializeDatabase().catch((error) => {
