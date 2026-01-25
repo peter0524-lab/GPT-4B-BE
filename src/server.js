@@ -38,29 +38,40 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(helmet());
 
-// CORS 설정 - 개발 환경에서는 더 유연하게 설정
+// CORS 설정 - Capacitor 및 웹 origin 허용
 const corsOptions = {
   origin: function (origin, callback) {
-    // 개발 환경에서는 모든 origin 허용 (모바일 테스트용)
-    if (process.env.NODE_ENV !== 'production') {
+    // 프로덕션에서 허용할 origin 목록
+    const allowedOrigins = [
+      process.env.FRONTEND_URL,
+      "https://main.d2eqy2d76d9t0m.amplifyapp.com",
+      "https://d3gv58ggenyxb5.cloudfront.net",
+      // Capacitor origins (모바일 앱)
+      "capacitor://localhost",
+      "ionic://localhost",
+      "http://localhost",
+      // 개발용
+      "http://localhost:5173",
+      "http://localhost:3000",
+      "http://localhost:5174",
+    ].filter(Boolean);
+    
+    // origin이 없는 경우 (same-origin 요청, Postman 등) 또는 허용 목록에 있는 경우
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      // 프로덕션에서는 지정된 origin만 허용
-      const allowedOrigins = [
-        process.env.FRONTEND_URL,
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://localhost:5174",
-      ].filter(Boolean);
-      
-      if (!origin || allowedOrigins.includes(origin)) {
+      // 개발 환경에서는 모든 origin 허용
+      if (process.env.NODE_ENV !== 'production') {
         callback(null, true);
       } else {
+        console.log('CORS blocked origin:', origin);
         callback(new Error('Not allowed by CORS'));
       }
     }
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
 
 app.use(cors(corsOptions));
