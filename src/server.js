@@ -41,12 +41,6 @@ app.use(helmet());
 // CORS 설정 - Capacitor 및 웹 origin 허용
 const corsOptions = {
   origin: function (origin, callback) {
-    // 개발 환경에서는 모든 origin 허용
-    if (process.env.NODE_ENV !== 'production') {
-      callback(null, true);
-      return;
-    }
-    
     // 프로덕션에서 허용할 origin 목록
     const allowedOrigins = [
       process.env.FRONTEND_URL,
@@ -57,17 +51,22 @@ const corsOptions = {
       "ionic://localhost",
       "http://localhost",
       // 개발용
-      "http://localhost:5173",
-      "http://localhost:3000",
-      "http://localhost:5174",
-    ].filter(Boolean);
-    
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:5174",
+      ].filter(Boolean);
+      
     // origin이 없는 경우 (same-origin 요청, Postman 등) 또는 허용 목록에 있는 경우
-    if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      logger.warn('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
+      // 개발 환경에서는 모든 origin 허용
+      if (process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+      } else {
+        console.log('CORS blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
     }
   },
   credentials: true,
