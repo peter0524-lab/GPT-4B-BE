@@ -41,6 +41,12 @@ app.use(helmet());
 // CORS 설정 - Capacitor 및 웹 origin 허용
 const corsOptions = {
   origin: function (origin, callback) {
+    // 개발 환경에서는 모든 origin 허용
+    if (process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+      return;
+    }
+    
     // 프로덕션에서 허용할 origin 목록
     const allowedOrigins = [
       process.env.FRONTEND_URL,
@@ -60,13 +66,8 @@ const corsOptions = {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      // 개발 환경에서는 모든 origin 허용
-      if (process.env.NODE_ENV !== 'production') {
-        callback(null, true);
-      } else {
-        console.log('CORS blocked origin:', origin);
-        callback(new Error('Not allowed by CORS'));
-      }
+      logger.warn('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
