@@ -1,5 +1,24 @@
-import sharp from 'sharp';
 import { logger } from './logger.js';
+
+// sharp를 lazy load (EC2 환경에서 실패할 수 있음)
+let sharp = null;
+let sharpLoadAttempted = false;
+
+const loadSharp = async () => {
+  if (sharpLoadAttempted) return sharp;
+  sharpLoadAttempted = true;
+  
+  try {
+    const sharpModule = await import('sharp');
+    sharp = sharpModule.default;
+    logger.info('sharp 모듈 로드 성공');
+  } catch (error) {
+    logger.warn('sharp 모듈 로드 실패 - 이미지 전처리 기능이 비활성화됩니다', error.message);
+    sharp = null;
+  }
+  
+  return sharp;
+};
 
 /**
  * 이미지 전처리 유틸리티
@@ -42,8 +61,19 @@ const bufferToBase64 = (buffer, mimeType = 'image/jpeg') => {
  * @returns {Promise<Object>} 검증 결과 및 메타데이터
  */
 export const validateImage = async (imageBuffer) => {
+  const sharpModule = await loadSharp();
+  if (!sharpModule) {
+    logger.warn('sharp 모듈이 없어 기본 검증만 수행합니다');
+    return {
+      isValid: imageBuffer.length <= MAX_FILE_SIZE,
+      errors: imageBuffer.length > MAX_FILE_SIZE ? ['파일 크기가 너무 큽니다.'] : [],
+      warnings: [],
+      metadata: null,
+    };
+  }
+  
   try {
-    const metadata = await sharp(imageBuffer).metadata();
+    const metadata = await sharpModule(imageBuffer).metadata();
     
     const validation = {
       isValid: true,
@@ -110,6 +140,12 @@ export const validateImage = async (imageBuffer) => {
  * @returns {Promise<Buffer>} 최적화된 이미지 버퍼
  */
 export const optimizeImage = async (imageBuffer, options = {}) => {
+  const sharpModule = await loadSharp();
+  if (!sharpModule) {
+    logger.warn('sharp 모듈이 없어 원본 이미지를 반환합니다');
+    return imageBuffer;
+  }
+  
   try {
     const {
       maxWidth = OPTIMAL_WIDTH,
@@ -118,7 +154,7 @@ export const optimizeImage = async (imageBuffer, options = {}) => {
       format = 'jpeg',
     } = options;
 
-    let pipeline = sharp(imageBuffer);
+    let pipeline = sharpModule(imageBuffer);
 
     // 메타데이터 확인
     const metadata = await pipeline.metadata();
@@ -177,13 +213,16 @@ export const optimizeImage = async (imageBuffer, options = {}) => {
  * @returns {Promise<Buffer>} 보정된 이미지 버퍼
  */
 export const correctRotation = async (imageBuffer) => {
+  const sharpModule = await loadSharp();
+  if (!sharpModule) return imageBuffer;
+  
   try {
-    const metadata = await sharp(imageBuffer).metadata();
+    const metadata = await sharpModule(imageBuffer).metadata();
     
     // EXIF orientation이 있으면 자동 회전
     if (metadata.orientation && metadata.orientation > 1) {
       logger.debug('이미지 회전 보정', { orientation: metadata.orientation });
-      return await sharp(imageBuffer)
+      return await sharpModule(imageBuffer)
         .rotate() // EXIF orientation에 따라 자동 회전
         .toBuffer();
     }
@@ -201,13 +240,16 @@ export const correctRotation = async (imageBuffer) => {
  * @returns {Promise<Buffer>} 보정된 이미지 버퍼
  */
 export const correctSkew = async (imageBuffer) => {
+  const sharpModule = await loadSharp();
+  if (!sharpModule) return imageBuffer;
+  
   try {
     // Sharp는 직접적인 기울기 보정을 지원하지 않으므로
     // Google Vision API의 DOCUMENT_TEXT_DETECTION을 사용하거나
     // OpenCV 같은 라이브러리가 필요합니다.
     // 여기서는 기본적인 선명화(sharpening)만 적용
     
-    const sharpened = await sharp(imageBuffer)
+    const sharpened = await sharpModule(imageBuffer)
       .sharpen({
         sigma: 1,
         flat: 1,
@@ -233,6 +275,9 @@ export const correctSkew = async (imageBuffer) => {
  * @returns {Promise<Buffer>} 크롭된 이미지 버퍼
  */
 export const detectAndCropCard = async (imageBuffer, options = {}) => {
+  const sharpModule = await loadSharp();
+  if (!sharpModule) return imageBuffer;
+  
   try {
     const {
       cropRatio = 0.8, // 중앙 80% 영역 크롭
@@ -240,7 +285,7 @@ export const detectAndCropCard = async (imageBuffer, options = {}) => {
       maxAspectRatio = 2.0, // 최대 가로:세로 비율
     } = options;
 
-    const metadata = await sharp(imageBuffer).metadata();
+    const metadata = await sharpModule(imageBuffer).metadata();
     const { width, height } = metadata;
 
     // 현재 비율 확인
@@ -259,7 +304,7 @@ export const detectAndCropCard = async (imageBuffer, options = {}) => {
     const left = Math.floor((width - cropWidth) / 2);
     const top = Math.floor((height - cropHeight) / 2);
 
-    const cropped = await sharp(imageBuffer)
+    const cropped = await sharpModule(imageBuffer)
       .extract({
         left,
         top,

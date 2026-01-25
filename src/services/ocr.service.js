@@ -4,7 +4,24 @@ import {
   preprocessImage, 
   detectCardRegionWithVisionAPI 
 } from '../utils/imagePreprocessor.js';
-import sharp from 'sharp';
+// sharp를 lazy load
+let sharp = null;
+let sharpLoadAttempted = false;
+
+const loadSharp = async () => {
+  if (sharpLoadAttempted) return sharp;
+  sharpLoadAttempted = true;
+  
+  try {
+    const sharpModule = await import('sharp');
+    sharp = sharpModule.default;
+  } catch (error) {
+    // sharp가 없어도 OCR은 동작 가능 (Google Vision API 사용)
+    sharp = null;
+  }
+  
+  return sharp;
+};
 import { processLLMChat } from './llm.service.js';
 
 /**
@@ -60,18 +77,23 @@ const processWithGoogleVision = async (base64Data) => {
         logger.debug('명함 영역 감지 성공', cardRegion);
         
         // 감지된 영역으로 이미지 크롭
-        const imageBuffer = Buffer.from(base64Data, 'base64');
-        const croppedBuffer = await sharp(imageBuffer)
-          .extract({
-            left: Math.max(0, cardRegion.left),
-            top: Math.max(0, cardRegion.top),
-            width: cardRegion.width,
-            height: cardRegion.height,
-          })
-          .toBuffer();
-        
-        processedBase64Data = croppedBuffer.toString('base64');
-        logger.debug('명함 영역 크롭 완료');
+        const sharpModule = await loadSharp();
+        if (sharpModule) {
+          const imageBuffer = Buffer.from(base64Data, 'base64');
+          const croppedBuffer = await sharpModule(imageBuffer)
+            .extract({
+              left: Math.max(0, cardRegion.left),
+              top: Math.max(0, cardRegion.top),
+              width: cardRegion.width,
+              height: cardRegion.height,
+            })
+            .toBuffer();
+          
+          processedBase64Data = croppedBuffer.toString('base64');
+          logger.debug('명함 영역 크롭 완료');
+        } else {
+          logger.warn('sharp 모듈이 없어 명함 영역 크롭을 건너뜁니다');
+        }
       }
     } catch (regionError) {
       logger.warn('명함 영역 감지 실패, 전체 이미지 사용', regionError);
