@@ -100,6 +100,22 @@ const createTables = async () => {
       logger.warn("business_cards gender migration skipped", { message: migrationErr.message });
     }
 
+    // design 컬럼을 ENUM에서 VARCHAR로 변경 (커스텀 색상 지원)
+    try {
+      const [designCol] = await connection.query(
+        `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'business_cards' AND COLUMN_NAME = 'design'`,
+        [process.env.DB_NAME || 'HCI_2025']
+      );
+      if (designCol && designCol.length > 0 && designCol[0].COLUMN_TYPE.includes('enum')) {
+        await connection.query(
+          `ALTER TABLE business_cards MODIFY COLUMN design VARCHAR(50) DEFAULT 'design-1'`
+        );
+        logger.info("business_cards.design column migrated from ENUM to VARCHAR");
+      }
+    } catch (migrationErr) {
+      logger.warn("business_cards design migration skipped", { message: migrationErr.message });
+    }
+
     // Gifts 테이블
     await connection.query(`
       CREATE TABLE IF NOT EXISTS gifts (
