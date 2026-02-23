@@ -43,9 +43,13 @@ const createTables = async () => {
       CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
+        username VARCHAR(255) UNIQUE,
         password VARCHAR(255),
         name VARCHAR(255),
         phone VARCHAR(50),
+        cardDesign VARCHAR(50),
+        company VARCHAR(255),
+        position VARCHAR(255),
         profileImage VARCHAR(500),
         oauthProvider ENUM('google', 'apple') NULL,
         oauthId VARCHAR(255),
@@ -55,9 +59,58 @@ const createTables = async () => {
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_email (email),
+        INDEX idx_username (username),
         INDEX idx_oauth (oauthProvider, oauthId)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+
+    // 기존 users 테이블에 username 필드가 없으면 추가 (마이그레이션)
+    try {
+      const [usernameCols] = await connection.query(
+        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'username'`,
+        [process.env.DB_NAME || 'HCI_2025']
+      );
+      if (!usernameCols || usernameCols.length === 0) {
+        await connection.query(
+          `ALTER TABLE users ADD COLUMN username VARCHAR(255) UNIQUE AFTER email`
+        );
+        await connection.query(
+          `ALTER TABLE users ADD INDEX idx_username (username)`
+        );
+        logger.info("users.username column added (migration)");
+      }
+    } catch (migrationErr) {
+      logger.warn("users username migration skipped", { message: migrationErr.message });
+    }
+
+    // 기존 users 테이블에 cardDesign, company, position 필드가 없으면 추가 (마이그레이션)
+    try {
+      const [cols] = await connection.query(
+        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME IN ('cardDesign', 'company', 'position')`,
+        [process.env.DB_NAME || 'HCI_2025']
+      );
+      const existingCols = cols.map(c => c.COLUMN_NAME);
+      if (!existingCols.includes('cardDesign')) {
+        await connection.query(
+          `ALTER TABLE users ADD COLUMN cardDesign VARCHAR(50) AFTER phone`
+        );
+      }
+      if (!existingCols.includes('company')) {
+        await connection.query(
+          `ALTER TABLE users ADD COLUMN company VARCHAR(255) AFTER cardDesign`
+        );
+      }
+      if (!existingCols.includes('position')) {
+        await connection.query(
+          `ALTER TABLE users ADD COLUMN position VARCHAR(255) AFTER company`
+        );
+      }
+      if (!existingCols.includes('cardDesign') || !existingCols.includes('company') || !existingCols.includes('position')) {
+        logger.info("users cardDesign/company/position columns added (migration)");
+      }
+    } catch (migrationErr) {
+      logger.warn("users cardDesign/company/position migration skipped", { message: migrationErr.message });
+    }
 
     // BusinessCards 테이블
     await connection.query(`
@@ -261,6 +314,37 @@ const createTables = async () => {
         UNIQUE KEY unique_group_card (groupId, businessCardId),
         INDEX idx_groupId (groupId),
         INDEX idx_businessCardId (businessCardId)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Auth Codes 테이블 (아이디 찾기용 인증 코드)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS auth_codes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        code_hash VARCHAR(255) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        attempts INT DEFAULT 0,
+        verified BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_email (email),
+        INDEX idx_expires_at (expires_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Password Reset Tokens 테이블
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        token_hash VARCHAR(255) NOT NULL UNIQUE,
+        expires_at TIMESTAMP NOT NULL,
+        used BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        INDEX idx_token_hash (token_hash),
+        INDEX idx_user_id (user_id),
+        INDEX idx_expires_at (expires_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
