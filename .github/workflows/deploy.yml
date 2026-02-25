@@ -1,0 +1,72 @@
+name: Deploy Backend to AWS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 수동 실행 가능
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Create deployment package (without node_modules)
+        run: |
+          zip -r deploy.zip . \
+            -x "*.git*" \
+            -x "node_modules/*" \
+            -x "chroma_data/*" \
+            -x ".env" \
+            -x "*.md" \
+            -x "tests/*"
+
+      - name: Wait for Elastic Beanstalk environment to be ready
+        run: |
+          echo "Waiting for Elastic Beanstalk environment to be ready..."
+          max_attempts=30
+          attempt=0
+          while [ $attempt -lt $max_attempts ]; do
+            status=$(aws elasticbeanstalk describe-environments \
+              --application-name gpt4b-backend \
+              --environment-names gpt4b-backend-env \
+              --region ap-northeast-2 \
+              --query 'Environments[0].Status' \
+              --output text 2>/dev/null || echo "Unknown")
+
+            if [ "$status" = "Ready" ]; then
+              echo "Environment is ready!"
+              exit 0
+            fi
+
+            echo "Attempt $((attempt+1))/$max_attempts: Environment status is '$status', waiting..."
+            sleep 10
+            attempt=$((attempt+1))
+          done
+
+          echo "Timeout: Environment did not become ready in time"
+          exit 1
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-northeast-2
+
+      - name: Deploy to Elastic Beanstalk
+        uses: einaregilsson/beanstalk-deploy@v22
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          application_name: gpt4b-backend
+          environment_name: gpt4b-backend-env
+          region: ap-northeast-2
+          version_label: ${{ github.sha }}-${{ github.run_number }}
+          deployment_package: deploy.zip
+          wait_for_environment_recovery: 180
